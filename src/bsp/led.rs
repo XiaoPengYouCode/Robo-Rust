@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use defmt::*;
 use embassy_stm32::gpio::{Level, Output, Speed};
 

@@ -1,0 +1,39 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "preLaunchTask": "${defaultBuildTask}",
+      "type": "probe-rs-debug",
+      "request": "launch",
+      "name": "probe_rs Executable Test",
+      "flashingConfig": {
+        "flashingEnabled": true,
+        "formatOptions": {
+          "binaryFormat": "elf",
+        }
+      },
+      "chip": "STM32F407IGHx",
+      "coreConfigs": [
+        {
+          "programBinary": "${workspaceFolder}/target/thumbv7em-none-eabi/release/rm3508_can",
+        }
+      ]
+    },
+    {
+      "type": "cortex-debug",
+      "request": "launch",
+      "name": "Debug with Cortex-Debug",
+      "servertype": "openocd",
+      "cwd": "${workspaceRoot}",
+      "preLaunchTask": "${defaultBuildTask}",
+      "runToEntryPoint": "main",
+      "executable": "${workspaceRoot}/target/thumbv7em-none-eabi/release/rm3508_can",
+      "device": "STM32F407IGHx",
+      // "svdFile": "${workspaceRoot}/STM32F407.svd",
+      "configFiles": [
+        "${workspaceRoot}/openocd.cfg"
+      ],
+      "showDevDebugOutput": "raw"
+    },
+  ]
+}

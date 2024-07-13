@@ -2,10 +2,10 @@
 name = "roborust"
 version = "0.1.0"
 edition = "2021"
+default-run = "main"
 authors = ["Little Boy"]
 
 [dependencies]
-# Change stm32f429zi to your chip name, if necessary.
 embassy-stm32 = { version = "0.1.0", git = "https://github.com/embassy-rs/embassy", features = ["defmt", "stm32f407ig", "unstable-pac", "memory-x", "time-driver-any", "exti", "chrono"] }
 embassy-sync = { version = "0.6.0", git = "https://github.com/embassy-rs/embassy", features = ["defmt"] }
 embassy-executor = { version = "0.5.0", git = "https://github.com/embassy-rs/embassy", features = ["task-arena-size-32768", "arch-cortex-m", "executor-thread", "executor-interrupt", "defmt", "integrated-timers"] }
