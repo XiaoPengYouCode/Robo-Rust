@@ -1,4 +1,4 @@
-/target
-/.cargo
-/.zed
-/.vscode
+# /target
+# /.cargo
+# /.zed
+# /.vscode
