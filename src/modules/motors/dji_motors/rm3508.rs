@@ -1,57 +1,49 @@
-use defmt::*;
+use defmt::{dbg, error};
+
+// const CAN_ID_IDENFITY_1: u16 = 0x200;
+// const CAN_ID_IDENFITY_2: u16 = 0x1ff;
 
 pub enum ReductionGearboxTransmissionRatio {
     Ratio19,
     Ratio168_17,
+    Ratio14,
+}
+
+impl ReductionGearboxTransmissionRatio {
+    pub fn to_string(&self) -> &str {
+        match self {
+            ReductionGearboxTransmissionRatio::Ratio19 => "19:1",
+            ReductionGearboxTransmissionRatio::Ratio168_17 => "168.17:1",
+            ReductionGearboxTransmissionRatio::Ratio14 => "14:1",
+        }
+    }
 }
 
 pub struct Rm3508 {
-    can_id: u16,
-    _can_id_full: u16,
-    _gear_ratio: ReductionGearboxTransmissionRatio,
-    can_message: [u8; 8],
+    pub gear_ratio: ReductionGearboxTransmissionRatio,
+    id: u8,
 }
 
-const RM3508_KP: f32 = 0.5;
-
 impl Rm3508 {
-    pub async fn new(id: u16, _gear_ratio: ReductionGearboxTransmissionRatio) -> Self {
-        info!("Rm3508 init!");
-        Self {
-            can_id: id,
-            _can_id_full: 0x200,
-            _gear_ratio,
-            can_message: [1, 64, 0, 0, 0, 0, 0, 0],
+    pub fn new(
+        gear_ratio: ReductionGearboxTransmissionRatio,
+        id: u8,
+    ) -> Result<Self, &'static str> {
+        dbg!("Rm3508 init!");
+        if id > 31 {
+            error!("init Rm3508 Error");
+            return Err("init Rm3508 Error");
         }
+        Ok(Self { gear_ratio, id })
     }
 
-    pub async fn get_id(&self) -> u16 {
-        // info!("motor id = {}", self.can_id);
-        self.can_id
+    pub fn id(&self) -> u8 {
+        dbg!("motor id = {}", self.id);
+        self.id
     }
 
-    pub async fn get_can_message(&self) -> &[u8; 8] {
-        // info!("Get can message = {:?}", self.can_message);
-        &self.can_message
-    }
-
-    pub async fn speed_control(&mut self, target_speed_rpm: i16, current_speed_rpm: i16, mut current_current: i16) {
-        if current_speed_rpm <= 0 {
-            current_current += 10;
-        } else if current_speed_rpm < target_speed_rpm {
-            current_current += ((target_speed_rpm - current_speed_rpm) as f32 * RM3508_KP) as i16; 
-        } else if current_speed_rpm > target_speed_rpm {
-            current_current -= ((current_speed_rpm - target_speed_rpm) as f32 * RM3508_KP) as i16; 
-        }
-
-        info!("{}", (target_speed_rpm - current_speed_rpm) as f32);
-
-        self.can_message[0] = (current_current >> 8) as u8;
-        self.can_message[1] = current_current as u8;
-    }
-
-    pub async fn protect(&mut self) {
-        self.can_message = [0; 8];
-        info!("protected!");
+    pub fn gear_ratio(&self) -> &ReductionGearboxTransmissionRatio {
+        dbg!("gear ratio = {}", self.gear_ratio.to_string());
+        &self.gear_ratio
     }
 }

@@ -1,4 +1,3 @@
-// mod communications;
+pub mod algorithms;
 pub mod imu;
-pub mod errors;
-pub mod motors;
+// pub mod motors;

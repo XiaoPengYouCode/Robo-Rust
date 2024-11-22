@@ -1,0 +1,8 @@
+/home/xiaopengyou/projects/robomaster/embedded/Robo-Rust/target/thumbv7em-none-eabihf/debug/deps/libembassy_usb_synopsys_otg-3326758abcf768d4.rmeta: /home/xiaopengyou/.cargo/git/checkouts/embassy-9312dcb0ed774b29/fb8e40b/embassy-usb-synopsys-otg/src/lib.rs /home/xiaopengyou/.cargo/git/checkouts/embassy-9312dcb0ed774b29/fb8e40b/embassy-usb-synopsys-otg/src/fmt.rs /home/xiaopengyou/.cargo/git/checkouts/embassy-9312dcb0ed774b29/fb8e40b/embassy-usb-synopsys-otg/src/otg_v1.rs /home/xiaopengyou/.cargo/git/checkouts/embassy-9312dcb0ed774b29/fb8e40b/embassy-usb-synopsys-otg/src/../README.md
+
+/home/xiaopengyou/projects/robomaster/embedded/Robo-Rust/target/thumbv7em-none-eabihf/debug/deps/embassy_usb_synopsys_otg-3326758abcf768d4.d: /home/xiaopengyou/.cargo/git/checkouts/embassy-9312dcb0ed774b29/fb8e40b/embassy-usb-synopsys-otg/src/lib.rs /home/xiaopengyou/.cargo/git/checkouts/embassy-9312dcb0ed774b29/fb8e40b/embassy-usb-synopsys-otg/src/fmt.rs /home/xiaopengyou/.cargo/git/checkouts/embassy-9312dcb0ed774b29/fb8e40b/embassy-usb-synopsys-otg/src/otg_v1.rs /home/xiaopengyou/.cargo/git/checkouts/embassy-9312dcb0ed774b29/fb8e40b/embassy-usb-synopsys-otg/src/../README.md
+
+/home/xiaopengyou/.cargo/git/checkouts/embassy-9312dcb0ed774b29/fb8e40b/embassy-usb-synopsys-otg/src/lib.rs:
+/home/xiaopengyou/.cargo/git/checkouts/embassy-9312dcb0ed774b29/fb8e40b/embassy-usb-synopsys-otg/src/fmt.rs:
+/home/xiaopengyou/.cargo/git/checkouts/embassy-9312dcb0ed774b29/fb8e40b/embassy-usb-synopsys-otg/src/otg_v1.rs:
+/home/xiaopengyou/.cargo/git/checkouts/embassy-9312dcb0ed774b29/fb8e40b/embassy-usb-synopsys-otg/src/../README.md:

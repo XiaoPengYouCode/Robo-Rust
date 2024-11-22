@@ -1,190 +1,380 @@
+use crate::bored_resources::ImuResources;
 use defmt::*;
-
-use embassy_stm32::spi::Config;
 use embassy_stm32::gpio::Pin;
-use embassy_time::{Timer, Instant};
+use embassy_stm32::spi::Config;
+use embassy_stm32::time::Hertz;
 use embassy_time::Duration;
-
-use embassy_stm32::peripherals::{DMA2_CH2, DMA2_CH3, PA4, PA7, PB0, PB3, PB4, SPI1};
+use embassy_time::Timer;
 
 use crate::bsp::spi_dma::*;
 
 const BMI088_GYRO_2000_SEN: f32 = 0.00106526443603169529841533860381f32;
 const BMI088_ACCEL_3G_SEN: f32 = 0.0008974358974f32;
 
+const ACCEL_RESET_REGISTER: u8 = 0x7Eu8;
+const ACCEL_RESET_MESSAGE: u8 = 0xB6u8;
+
+const GYRO_RESET_REGISTER: u8 = 0x14u8;
+const GYRO_RESET_MESSAGE: u8 = 0xB6u8;
+
+const ACC_PWR_CTRL_ADDR: u8 = 0x7Du8;
+const ACC_PWR_CTRL_ON: u8 = 0x04u8;
+
 pub struct Bmi088 {
-    spi_perh: SpiHandles<2>,
+    pub spi_perh: SpiHandles<2>,
     gyro: [f32; 3],
     accel: [f32; 3],
     temp: f32,
 }
 
 impl Bmi088 {
-    pub fn new(
-        spi_perh: SPI1,
-        sck: PB3,
-        accel_pin: PA4,
-        gyro_pin: PB0,
-        mosi_pin: PA7,
-        miso_pin: PB4,
-        dma_tx: DMA2_CH3,
-        dma_rx: DMA2_CH2,
-    ) -> Self {
-        let config = Config::default();
-        // let csb1_accel = Output::new(accel_pin, Level::Low, Speed::High);
-        // let csb2_gyro = Output::new(gyro_pin, Level::Low, Speed::High);
+    pub fn new(imu_resources: ImuResources) -> Self {
+        let mut config = Config::default();
+        config.frequency = Hertz(2_000_000);
 
         Self {
             spi_perh: SpiHandles::new(
-                spi_perh,
-                sck,
-                mosi_pin,
-                miso_pin,
-                dma_tx,
-                dma_rx,
-                [accel_pin.degrade(), gyro_pin.degrade()],
-                config),
+                imu_resources.spi_channel,
+                imu_resources.sck,
+                imu_resources.mosi_pin,
+                imu_resources.miso_pin,
+                imu_resources.dma_tx,
+                imu_resources.dma_rx,
+                [
+                    imu_resources.accel_pin.degrade(),
+                    imu_resources.gyro_pin.degrade(),
+                ],
+                config,
+            ),
             gyro: [0.0, 0.0, 0.0],
             accel: [0.0, 0.0, 0.0],
             temp: 0.0,
         }
     }
 
-    // pub async fn init(&mut self) -> Result<(), &'static str> {
-    //     // Initialize BMI088
-    //     // Check chip ID, configure settings, etc.
-    //     let accel_id = self.read_accel_register(0x00).await?;
-    //     if accel_id != 0x1E {
-    //         return Err("Invalid accelerometer chip ID");
-    //     }
+    pub async fn enable(&mut self) -> Result<(), &'static str> {
+        info!("Initialize BMI088");
+        self.spi_perh.cs[0].set_high();
+        self.spi_perh.cs[1].set_high();
 
-    //     let gyro_id = self.read_gyro_register(0x00).await?;
-    //     if gyro_id != 0x0F {
-    //         return Err("Invalid gyroscope chip ID");
-    //     }
+        // software reset
+        self.write_accel_single_register(&ACCEL_RESET_REGISTER, ACCEL_RESET_MESSAGE)
+            .await?;
+        self.write_gyro_single_register(&GYRO_RESET_REGISTER, GYRO_RESET_MESSAGE)
+            .await?;
 
-    //     Ok(())
-    // }
+        // Check chip ID
+        let accel_id = self.read_accel_single_register(0x00).await?;
+        debug!("accel_id: {}", accel_id);
+        if accel_id != 0x1E {
+            return Err("Invalid accelerometer chip ID");
+        }
+        let gyro_id = self.read_gyro_single_register(0x00).await?;
+        debug!("gyro_id: {}", gyro_id);
+        if gyro_id != 0x0F {
+            return Err("Invalid gyroscope chip ID");
+        }
 
-    async fn read_accel_register(&mut self, reg: u8) -> Result<u8, &'static str> {
+        // enable accel data
+        self.write_accel_single_register(&ACC_PWR_CTRL_ADDR, ACC_PWR_CTRL_ON)
+            .await?;
+
+        // software reset
+        self.write_accel_single_register(&ACCEL_RESET_REGISTER, ACCEL_RESET_MESSAGE)
+            .await?;
+        self.write_gyro_single_register(&GYRO_RESET_REGISTER, GYRO_RESET_MESSAGE)
+            .await?;
+
+        Ok(())
+    }
+
+    async fn read_accel_single_register(&mut self, read_reg: u8) -> Result<u8, &'static str> {
         self.spi_perh.cs[0].set_low();
         Timer::after(Duration::from_micros(1)).await; // Small delay
 
         // For read operations, set the MSB of the register address
-        let read_reg = reg | 0x80;
-        
-        self.spi_perh.spi.write(&[read_reg]).await.map_err(|_| "SPI write failed")?;
+        let read_message = read_reg | 0x80;
+        self.spi_perh
+            .spi
+            .write(&[read_message])
+            .await
+            .map_err(|_| "SPI write failed")?;
+
+        // bmi088 accel regoster need to read twice to get correct message
         let mut buffer = [0u8];
-        self.spi_perh.spi.transfer(&mut buffer, &[read_reg]).await.map_err(|_| "SPI transfer failed")?;
+        self.spi_perh
+            .spi
+            .read(&mut buffer)
+            .await
+            .map_err(|_| "SPI read failed")?;
+        // debug!("spi_read_once: {}", &buffer[0]);
+        self.spi_perh
+            .spi
+            .read(&mut buffer)
+            .await
+            .map_err(|_| "SPI read failed")?;
+        // debug!("spi_read_twice: {}", &buffer[0]);
+        Timer::after(Duration::from_micros(1)).await; // Small delay
 
         self.spi_perh.cs[0].set_high();
         Ok(buffer[0])
     }
 
-    async fn read_gyro_register(&mut self, reg: u8) -> Result<u8, &'static str> {
+    async fn read_gyro_single_register(&mut self, read_reg: u8) -> Result<u8, &'static str> {
         self.spi_perh.cs[1].set_low();
         Timer::after(Duration::from_micros(1)).await; // Small delay
 
         // For read operations, set the MSB of the register address
-        let read_reg = reg | 0x80;
-        
-        self.spi_perh.spi.write(&[read_reg]).await.map_err(|_| "SPI write failed")?;
+        let read_message = read_reg | 0x80;
+
+        self.spi_perh
+            .spi
+            .write(&[read_message])
+            .await
+            .map_err(|_| "SPI write failed")?;
         let mut buffer = [0u8];
-        self.spi_perh.spi.transfer(&mut buffer, &[read_reg]).await.map_err(|_| "SPI transfer failed")?;
+        self.spi_perh
+            .spi
+            .read(&mut buffer)
+            .await
+            .map_err(|_| "SPI read failed")?;
 
         self.spi_perh.cs[1].set_high();
         Ok(buffer[0])
     }
 
+    async fn write_accel_single_register(
+        &mut self,
+        write_reg: &u8,
+        write_messge: u8,
+    ) -> Result<(), &'static str> {
+        self.spi_perh.cs[0].set_low();
+        Timer::after(Duration::from_micros(1)).await; // Small delay
+
+        self.spi_perh
+            .spi
+            .write(&[write_reg & 0x7Fu8])
+            .await
+            .map_err(|_| "SPI write failed")?;
+
+        self.spi_perh
+            .spi
+            .write(&[write_messge])
+            .await
+            .map_err(|_| "SPI write failed")?;
+
+        Timer::after(Duration::from_micros(1)).await; // Small delay
+        self.spi_perh.cs[0].set_high();
+
+        Ok(())
+    }
+
+    async fn write_gyro_single_register(
+        &mut self,
+        write_reg: &u8,
+        write_messge: u8,
+    ) -> Result<(), &'static str> {
+        self.spi_perh.cs[1].set_low();
+        Timer::after(Duration::from_micros(1)).await; // Small delay
+
+        // For read operations, set the MSB of the register address
+        self.spi_perh
+            .spi
+            .write(&[write_reg & 0x7Fu8])
+            .await
+            .map_err(|_| "SPI write failed")?;
+
+        self.spi_perh
+            .spi
+            .write(&[write_messge])
+            .await
+            .map_err(|_| "SPI write failed")?;
+
+        Timer::after(Duration::from_micros(1)).await; // Small delay
+
+        self.spi_perh.cs[1].set_high();
+
+        Ok(())
+    }
+
+    async fn read_accel_consecutive_register(
+        &mut self,
+        read_reg_first: u8,
+    ) -> Result<[u8; 6], &'static str> {
+        info!("Read Accel Register consecutive");
+
+        // Set CS low
+        self.spi_perh.cs[0].set_low();
+        Timer::after(Duration::from_micros(1)).await; // Small delay
+
+        let mut send_buffer = [read_reg_first; 7];
+        for i in 0..7 {
+            send_buffer[i] = (send_buffer[i] | 0b_1000_0000) + (i as u8);
+        }
+
+        let mut receive_buffer = [0u8; 7];
+
+        debug!("send buffer = {:#}", send_buffer);
+        debug!("send buffer = {:#b}", send_buffer);
+
+        for i in 0..7 {
+            let send = send_buffer[i];
+            let mut receive = [0u8];
+            self.spi_perh
+                .spi
+                .write(&[send])
+                .await
+                .map_err(|_| "->  first send error")?;
+            self.spi_perh
+                .spi
+                .read(&mut receive)
+                .await
+                .map_err(|_| "->  once read error")?;
+            debug!("receive data once = {:#b}", &receive[0]);
+            self.spi_perh
+                .spi
+                .read(&mut receive)
+                .await
+                .map_err(|_| "->  twice read error")?;
+            receive_buffer[i] = receive[0];
+            debug!("receive data twice = {:#b}", &receive_buffer[i]);
+        }
+
+        debug!("receive_buffer = {:#}", receive_buffer);
+        // Set CS high
+        self.spi_perh.cs[0].set_high();
+
+        // Return the received data (excluding the first byte which is dummy)
+        Ok(receive_buffer[1..]
+            .try_into()
+            .map_err(|_| "->  Slice to array conversion failed")?)
+    }
+
+    async fn read_gyro_consecutive_register(
+        &mut self,
+        read_reg_first: u8,
+    ) -> Result<[u8; 6], &'static str> {
+        info!("Read gyro register");
+
+        self.spi_perh.cs[1].set_low();
+        Timer::after(Duration::from_micros(1)).await; // Small delay
+
+        let mut send_data = [read_reg_first | 0b_1000_0000; 7];
+        let mut receive_data = [0u8; 7];
+
+        for i in 0..7 {
+            send_data[i] += i as u8;
+        }
+
+        // debug!("send data{:#}", send_data);
+        // debug!("send data{:#b}", send_data);
+
+        self.spi_perh
+            .spi
+            .transfer(&mut receive_data, &mut send_data)
+            .await
+            .map_err(|_| "->  Read gyro register error")?;
+        // debug!("receive data{:#}", receive_data);
+
+        // Copy the received data (excluding the first byte which is dummy)
+        Ok(receive_data[1..]
+            .try_into()
+            .map_err(|_| "->  Slice to array conversion failed")?)
+    }
+
     pub async fn read_accel(&mut self) -> Result<(f32, f32, f32), &'static str> {
-        let x_l = self.read_accel_register(0x12).await? as i16;
-        let x_h = self.read_accel_register(0x13).await? as i16;
-        let y_l = self.read_accel_register(0x14).await? as i16;
-        let y_h = self.read_accel_register(0x15).await? as i16;
-        let z_l = self.read_accel_register(0x16).await? as i16;
-        let z_h = self.read_accel_register(0x17).await? as i16;
+        info!("Begin to read imu accel");
+        let buffer = self.read_accel_consecutive_register(0x12u8).await?;
 
-        let x = ((x_h << 8) | x_l) as f32;
-        let y = ((y_h << 8) | y_l) as f32;
-        let z = ((z_h << 8) | z_l) as f32;
+        let x_l = buffer[0];
+        let x_h = buffer[1];
+        let y_l = buffer[2];
+        let y_h = buffer[3];
+        let z_l = buffer[4];
+        let z_h = buffer[5];
 
-        // info!("x = {}, y = {}, z = {}", x, y, z);
+        // debug!("Accel: x_l = {}, x_h = {}, y_l = {}, y_h = {}, z_l = {}, z_h = {}", x_l, x_h, y_l, y_h, z_l, z_h);
+
+        let x = i16::from_le_bytes([x_l, x_h]) as f32 * BMI088_ACCEL_3G_SEN;
+        let y = i16::from_le_bytes([y_l, y_h]) as f32 * BMI088_ACCEL_3G_SEN;
+        let z = i16::from_le_bytes([z_l, z_h]) as f32 * BMI088_ACCEL_3G_SEN;
+
+        // debug!("Accel: x = {}, y = {}, z = {}", x, y, z);
 
         Ok((x, y, z))
     }
 
     pub async fn read_gyro(&mut self) -> Result<(f32, f32, f32), &'static str> {
-        let x_l = self.read_gyro_register(0x02).await? as i16;
-        let x_h = self.read_gyro_register(0x03).await? as i16;
-        let y_l = self.read_gyro_register(0x04).await? as i16;
-        let y_h = self.read_gyro_register(0x05).await? as i16;
-        let z_l = self.read_gyro_register(0x06).await? as i16;
-        let z_h = self.read_gyro_register(0x07).await? as i16;
+        let buffer = self.read_gyro_consecutive_register(0x02u8).await?;
 
-        let x = ((x_h << 8) | x_l) as f32;
-        let y = ((y_h << 8) | y_l) as f32;
-        let z = ((z_h << 8) | z_l) as f32;
+        let x_l = buffer[0];
+        let x_h = buffer[1];
+        let y_l = buffer[2];
+        let y_h = buffer[3];
+        let z_l = buffer[4];
+        let z_h = buffer[5];
+
+        // debug!("gyro: x_l = {}, x_h = {}, y_l = {}, y_h = {}, z_l = {}, z_h = {}", x_l, x_h, y_l, y_h, z_l, z_h);
+
+        let x = i16::from_le_bytes([x_l, x_h]) as f32 * BMI088_GYRO_2000_SEN;
+        let y = i16::from_le_bytes([y_l, y_h]) as f32 * BMI088_GYRO_2000_SEN;
+        let z = i16::from_le_bytes([z_l, z_h]) as f32 * BMI088_GYRO_2000_SEN;
+
+        // debug!("Gyro: x={}, y={}, z={}", x, y, z);
 
         Ok((x, y, z))
     }
 
     pub async fn read_temp(&mut self) -> Result<f32, &'static str> {
-        let temp_l = self.read_accel_register(0x22).await? as i16;
-        let temp_h = self.read_accel_register(0x23).await? as i16;
+        let temp_l = self.read_accel_single_register(0x22).await? as i16;
+        let temp_h = self.read_accel_single_register(0x23).await? as i16;
 
         let mut temp = (temp_l << 3) | (temp_h >> 5);
-        if temp > 1023 {     
+        if temp > 1023 {
             temp = temp - 2048;
         }
         let temp = temp as f32 * 0.125f32 + 23.0f32;
-        // defmt::debug!("Raw temperature: {}", temp);
         Ok(temp as f32)
     }
-}
 
-// 2kHz imu read
-#[embassy_executor::task]
-pub async fn imu_task(mut bmi088: Bmi088) {
-    let period = Duration::from_hz(2000);
-    let mut last_run = Instant::now();
-    loop {
-        match bmi088.read_accel().await {
+    pub async fn get_data(&self) -> (f32, f32, f32, f32, f32, f32) {
+        (
+            self.gyro[0],
+            self.gyro[1],
+            self.gyro[2],
+            self.accel[0],
+            self.accel[1],
+            self.accel[2],
+        )
+    }
+
+    pub async fn imu_update(&mut self) {
+        info!("Begin to read imu");
+        match self.read_accel().await {
             Ok((x, y, z)) => {
-                bmi088.accel = [x * BMI088_ACCEL_3G_SEN, y * BMI088_ACCEL_3G_SEN, z * BMI088_ACCEL_3G_SEN];
-                // info!("Accel: x={}, y={}, z={}", 
-                //     bmi088.accel[0],
-                //     bmi088.accel[1], 
-                //     bmi088.accel[2]);
-            },
+                self.accel = [x, y, z];
+            }
             Err(e) => {
-                defmt::error!("Failed to read accelerometer: {}", e);
+                error!("Failed to read accelerometer: {}", e);
             }
         }
 
-        match bmi088.read_gyro().await {
+        match self.read_gyro().await {
             Ok((x, y, z)) => {
-                bmi088.gyro = [x * BMI088_GYRO_2000_SEN, y * BMI088_GYRO_2000_SEN, z * BMI088_GYRO_2000_SEN];
-                info!("Gyro: x={}, y={}, z={}", 
-                    bmi088.gyro[0], 
-                    bmi088.gyro[1], 
-                    bmi088.gyro[2]);
-            },
+                self.gyro = [x, y, z];
+            }
             Err(e) => {
-                defmt::error!("Failed to read gyroscope: {}", e);
+                error!("Failed to read gyroscope: {}", e);
             }
         }
 
-        match bmi088.read_temp().await {
+        match self.read_temp().await {
             Ok(temp) => {
-                bmi088.temp = temp;
-                // info!("Temp: {}", temp);
-            },
+                self.temp = temp;
+            }
             Err(e) => {
                 error!("Failed to read temperature: {}", e);
-            } 
+            }
         }
-
-        last_run += period;
-        Timer::at(last_run).await;
     }
 }

@@ -1,13 +1,21 @@
 use defmt::*;
 
-pub struct Rm6020 {
-    pub can_id: u8,
-
+pub struct Rm2006 {
+    id: u8,
 }
 
-impl Rm6020 {
-    pub async fn init(&mut self, id: u8) {
+impl Rm2006 {
+    pub fn new(id: u8) -> Result<Self, &'static str> {
         info!("Rm2006 init!");
-        self.can_id = id;
+        if id > 31 {
+            error!("init Rm2006 Error");
+            return Err("init Rm2006 Error");
+        }
+        Ok(Self { id })
+    }
+
+    pub fn id(&self) -> u8 {
+        info!("motor id = {}", self.id);
+        self.id
     }
 }

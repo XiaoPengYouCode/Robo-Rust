@@ -1,0 +1,10 @@
+/home/xiaopengyou/projects/robomaster/embedded/Robo-Rust/target/thumbv7em-none-eabihf/debug/deps/libembedded_nal-7d1b9e7a436c3d19.rmeta: /home/xiaopengyou/.cargo/registry/src/index.crates.io-6f17d22bba15001f/embedded-nal-0.9.0/src/lib.rs /home/xiaopengyou/.cargo/registry/src/index.crates.io-6f17d22bba15001f/embedded-nal-0.9.0/src/dns.rs /home/xiaopengyou/.cargo/registry/src/index.crates.io-6f17d22bba15001f/embedded-nal-0.9.0/src/stack/mod.rs /home/xiaopengyou/.cargo/registry/src/index.crates.io-6f17d22bba15001f/embedded-nal-0.9.0/src/stack/share.rs /home/xiaopengyou/.cargo/registry/src/index.crates.io-6f17d22bba15001f/embedded-nal-0.9.0/src/stack/tcp.rs /home/xiaopengyou/.cargo/registry/src/index.crates.io-6f17d22bba15001f/embedded-nal-0.9.0/src/stack/udp.rs
+
+/home/xiaopengyou/projects/robomaster/embedded/Robo-Rust/target/thumbv7em-none-eabihf/debug/deps/embedded_nal-7d1b9e7a436c3d19.d: /home/xiaopengyou/.cargo/registry/src/index.crates.io-6f17d22bba15001f/embedded-nal-0.9.0/src/lib.rs /home/xiaopengyou/.cargo/registry/src/index.crates.io-6f17d22bba15001f/embedded-nal-0.9.0/src/dns.rs /home/xiaopengyou/.cargo/registry/src/index.crates.io-6f17d22bba15001f/embedded-nal-0.9.0/src/stack/mod.rs /home/xiaopengyou/.cargo/registry/src/index.crates.io-6f17d22bba15001f/embedded-nal-0.9.0/src/stack/share.rs /home/xiaopengyou/.cargo/registry/src/index.crates.io-6f17d22bba15001f/embedded-nal-0.9.0/src/stack/tcp.rs /home/xiaopengyou/.cargo/registry/src/index.crates.io-6f17d22bba15001f/embedded-nal-0.9.0/src/stack/udp.rs
+
+/home/xiaopengyou/.cargo/registry/src/index.crates.io-6f17d22bba15001f/embedded-nal-0.9.0/src/lib.rs:
+/home/xiaopengyou/.cargo/registry/src/index.crates.io-6f17d22bba15001f/embedded-nal-0.9.0/src/dns.rs:
+/home/xiaopengyou/.cargo/registry/src/index.crates.io-6f17d22bba15001f/embedded-nal-0.9.0/src/stack/mod.rs:
+/home/xiaopengyou/.cargo/registry/src/index.crates.io-6f17d22bba15001f/embedded-nal-0.9.0/src/stack/share.rs:
+/home/xiaopengyou/.cargo/registry/src/index.crates.io-6f17d22bba15001f/embedded-nal-0.9.0/src/stack/tcp.rs:
+/home/xiaopengyou/.cargo/registry/src/index.crates.io-6f17d22bba15001f/embedded-nal-0.9.0/src/stack/udp.rs:
