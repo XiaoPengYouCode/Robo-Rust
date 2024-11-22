@@ -1,6 +1,0 @@
-cargo:rustc-link-lib=static=cortex-m
-cargo:rustc-link-search=/home/xiaopengyou/projects/robomaster/embedded/Robo-Rust/target/thumbv7em-none-eabihf/debug/build/cortex-m-e3b9134f2adf49b8/out
-cargo:rustc-cfg=cortex_m
-cargo:rustc-cfg=armv7m
-cargo:rustc-cfg=armv7em
-cargo:rustc-cfg=has_fpu
