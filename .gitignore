@@ -1,4 +1,5 @@
-# /target
-# /.cargo
-# /.zed
-# /.vscode
+/target
+/.zed
+/.vscode
+/.idea
+/.rust-analyzer.json
