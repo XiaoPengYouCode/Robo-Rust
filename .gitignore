@@ -3,3 +3,4 @@
 /.vscode
 /.idea
 /.rust-analyzer.json
+/Cargo.lock
