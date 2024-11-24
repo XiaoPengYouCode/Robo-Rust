@@ -1,5 +1,5 @@
 use crate::bored_resources::ImuResources;
-use defmt::*;
+use defmt::{debug, error, info};
 use embassy_stm32::gpio::Pin;
 use embassy_stm32::spi::Config;
 use embassy_stm32::time::Hertz;
@@ -100,7 +100,7 @@ impl Bmi088 {
             .await
             .map_err(|_| "SPI write failed")?;
 
-        // bmi088 accel regoster need to read twice to get correct message
+        // bmi088 accel register needs to be read twice to get the correct message
         let mut buffer = [0u8];
         self.spi_perh
             .spi
@@ -145,21 +145,21 @@ impl Bmi088 {
 
     async fn write_accel_single_register(
         &mut self,
-        write_reg: &u8,
-        write_messge: u8,
+        write_register: &u8,
+        write_message: u8,
     ) -> Result<(), &'static str> {
         self.spi_perh.cs[0].set_low();
         Timer::after(Duration::from_micros(1)).await; // Small delay
 
         self.spi_perh
             .spi
-            .write(&[write_reg & 0x7Fu8])
+            .write(&[write_register & 0x7Fu8])
             .await
             .map_err(|_| "SPI write failed")?;
 
         self.spi_perh
             .spi
-            .write(&[write_messge])
+            .write(&[write_message])
             .await
             .map_err(|_| "SPI write failed")?;
 
@@ -171,8 +171,8 @@ impl Bmi088 {
 
     async fn write_gyro_single_register(
         &mut self,
-        write_reg: &u8,
-        write_messge: u8,
+        write_register: &u8,
+        write_message: u8,
     ) -> Result<(), &'static str> {
         self.spi_perh.cs[1].set_low();
         Timer::after(Duration::from_micros(1)).await; // Small delay
@@ -180,13 +180,13 @@ impl Bmi088 {
         // For read operations, set the MSB of the register address
         self.spi_perh
             .spi
-            .write(&[write_reg & 0x7Fu8])
+            .write(&[write_register & 0x7Fu8])
             .await
             .map_err(|_| "SPI write failed")?;
 
         self.spi_perh
             .spi
-            .write(&[write_messge])
+            .write(&[write_message])
             .await
             .map_err(|_| "SPI write failed")?;
 
@@ -215,7 +215,7 @@ impl Bmi088 {
         let mut receive_buffer = [0u8; 7];
 
         debug!("send buffer = {:#}", send_buffer);
-        debug!("send buffer = {:#b}", send_buffer);
+        debug!("send buffer in binary format = {:#b}", send_buffer);
 
         for i in 0..7 {
             let send = send_buffer[i];
@@ -230,14 +230,14 @@ impl Bmi088 {
                 .read(&mut receive)
                 .await
                 .map_err(|_| "->  once read error")?;
-            debug!("receive data once = {:#b}", &receive[0]);
+            debug!("received data after first read = {:#b}", &receive[0]);
             self.spi_perh
                 .spi
                 .read(&mut receive)
                 .await
                 .map_err(|_| "->  twice read error")?;
             receive_buffer[i] = receive[0];
-            debug!("receive data twice = {:#b}", &receive_buffer[i]);
+            debug!("received data after second read = {:#b}", &receive_buffer[i]);
         }
 
         debug!("receive_buffer = {:#}", receive_buffer);
@@ -334,7 +334,7 @@ impl Bmi088 {
             temp = temp - 2048;
         }
         let temp = temp as f32 * 0.125f32 + 23.0f32;
-        Ok(temp as f32)
+        Ok(temp)
     }
 
     pub async fn get_data(&self) -> (f32, f32, f32, f32, f32, f32) {
@@ -376,5 +376,6 @@ impl Bmi088 {
                 error!("Failed to read temperature: {}", e);
             }
         }
+        debug!("Update imu data");
     }
 }

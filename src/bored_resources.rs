@@ -28,4 +28,19 @@ assign_resources! {
         tx: PD1,
         rx: PD0,
     },
+    usart1: Usart1Resources {
+        usart: USART1,
+        tx: PA9,
+        rx: PA10,
+    },
+    usart2: Usart2Resources {
+        usart: USART2,
+        tx: PA2,
+        rx: PA3,
+    },
+    dbus: DbusResources {
+        usart: USART3,
+        tx: PB10,
+        rx: PB11,
+    },
 }
