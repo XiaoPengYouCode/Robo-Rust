@@ -3,7 +3,8 @@
 
 use defmt::*;
 use embassy_executor::Spawner;
-use embassy_stm32::Config;
+use embassy_stm32::{gpio::{Input, Level, Output, Pull, Speed}, Config};
+use embassy_time::{Duration, Timer};
 use {defmt_rtt as _, panic_probe as _}; // global logger
 
 use roborust::bored_resources::*;
@@ -13,5 +14,26 @@ use roborust::split_resources;
 async fn main(_spawner: Spawner) {
     info!("Roborust!");
     let p = embassy_stm32::init(Config::default());
-    let _r = split_resources!(p);
+    let r = split_resources!(p);
+
+    let key_pin = Input::new(r.key.pin, Pull::Up);
+    loop {
+        if key_pin.is_high() {
+            info!("LED is high");
+        } else {
+            info!("LED is low");
+        }
+        Timer::after(Duration::from_millis(50)).await;
+    }
+}
+
+#[embassy_executor::task]
+async fn led_task(led_resources: LedResources) {
+    let mut led = Output::new(led_resources.pin, Level::Low, Speed::Low);
+    loop {
+        led.set_high();
+        Timer::after(Duration::from_millis(500)).await;
+        led.set_low();
+        Timer::after(Duration::from_millis(500)).await;
+    }
 }

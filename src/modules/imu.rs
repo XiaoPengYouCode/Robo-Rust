@@ -1,5 +1,6 @@
+#[allow(unused_imports)]
 use crate::bored_resources::ImuResources;
-use defmt::{debug, error, info};
+use defmt::{debug, info};
 use embassy_stm32::gpio::Pin;
 use embassy_stm32::spi::Config;
 use embassy_stm32::time::Hertz;
@@ -10,6 +11,8 @@ use crate::bsp::spi_dma::*;
 
 const BMI088_GYRO_2000_SEN: f32 = 0.00106526443603169529841533860381f32;
 const BMI088_ACCEL_3G_SEN: f32 = 0.0008974358974f32;
+
+const BMI088_COM_WAIT_SENSOR_TIME: u8 = 150;
 
 const ACCEL_RESET_REGISTER: u8 = 0x7Eu8;
 const ACCEL_RESET_MESSAGE: u8 = 0xB6u8;
@@ -30,7 +33,7 @@ pub struct Bmi088 {
 impl Bmi088 {
     pub fn new(imu_resources: ImuResources) -> Self {
         let mut config = Config::default();
-        config.frequency = Hertz(2_000_000);
+        config.frequency = Hertz(1_000);
 
         Self {
             spi_perh: SpiHandles::new(
@@ -52,38 +55,61 @@ impl Bmi088 {
         }
     }
 
-    pub async fn enable(&mut self) -> Result<(), &'static str> {
-        info!("Initialize BMI088");
-        self.spi_perh.cs[0].set_high();
-        self.spi_perh.cs[1].set_high();
+    pub async fn bmi088_accel_init(&mut self) -> Result<(), &'static str> {
+        info!("Initialize BMI088 Accelerometer");
 
-        // software reset
-        self.write_accel_single_register(&ACCEL_RESET_REGISTER, ACCEL_RESET_MESSAGE)
-            .await?;
-        self.write_gyro_single_register(&GYRO_RESET_REGISTER, GYRO_RESET_MESSAGE)
-            .await?;
+        //check communication with BMI088
+        let _accel_id = self.read_accel_single_register(0x00).await?;
+        Timer::after(Duration::from_millis(BMI088_COM_WAIT_SENSOR_TIME as u64)).await;
+        let _accel_id: u8 = self.read_accel_single_register(0x00).await?;
+        Timer::after(Duration::from_millis(BMI088_COM_WAIT_SENSOR_TIME as u64)).await;
 
-        // Check chip ID
-        let accel_id = self.read_accel_single_register(0x00).await?;
-        debug!("accel_id: {}", accel_id);
-        if accel_id != 0x1E {
+        self.write_accel_single_register(&ACCEL_RESET_REGISTER, ACCEL_RESET_MESSAGE).await?;
+        Timer::after(Duration::from_millis(80)).await;
+
+        let _accel_id = self.read_accel_single_register(0x00).await?;
+        Timer::after(Duration::from_millis(BMI088_COM_WAIT_SENSOR_TIME as u64)).await;
+        let accel_id: u8 = self.read_accel_single_register(0x00).await?;
+        Timer::after(Duration::from_millis(BMI088_COM_WAIT_SENSOR_TIME as u64)).await;
+
+        info!("accel_id: {:X}", accel_id);
+        if accel_id!= 0x1E {
             return Err("Invalid accelerometer chip ID");
         }
-        let gyro_id = self.read_gyro_single_register(0x00).await?;
-        debug!("gyro_id: {}", gyro_id);
-        if gyro_id != 0x0F {
+
+        self.write_accel_single_register(&ACC_PWR_CTRL_ADDR, ACC_PWR_CTRL_ON).await?;
+        Timer::after(Duration::from_millis(100)).await;
+        Ok(())
+    }
+
+    pub async fn bmi088_gyro_init(&mut self) -> Result<(), &'static str> {
+        info!("Initialize BMI088 Gyroscope");
+
+        //check communication with BMI088
+        let _gyro_id = self.read_gyro_single_register(0x00).await?;
+        let _gyro_id: u8 = self.read_gyro_single_register(0x00).await?;
+
+        self.write_gyro_single_register(&GYRO_RESET_REGISTER, GYRO_RESET_MESSAGE).await?;
+        Timer::after(Duration::from_millis(100)).await;
+
+        let _gyro_id = self.read_gyro_single_register(0x00).await?;
+        let gyro_id: u8 = self.read_gyro_single_register(0x00).await?;
+
+        info!("gyro_id: {:X}", gyro_id);
+
+        if gyro_id!= 0x0F {
             return Err("Invalid gyroscope chip ID");
         }
+        Ok(())
+    }
 
-        // enable accel data
-        self.write_accel_single_register(&ACC_PWR_CTRL_ADDR, ACC_PWR_CTRL_ON)
-            .await?;
+    pub async fn bmi088_init(&mut self) -> Result<(), &'static str> {
+        info!("Initialize BMI088");
 
-        // software reset
-        self.write_accel_single_register(&ACCEL_RESET_REGISTER, ACCEL_RESET_MESSAGE)
-            .await?;
-        self.write_gyro_single_register(&GYRO_RESET_REGISTER, GYRO_RESET_MESSAGE)
-            .await?;
+        self.bmi088_accel_init().await?;
+        self.bmi088_gyro_init().await?;
+
+        Timer::after(Duration::from_millis(50)).await;
 
         Ok(())
     }
@@ -92,35 +118,41 @@ impl Bmi088 {
         self.spi_perh.cs[0].set_low();
         Timer::after(Duration::from_micros(1)).await; // Small delay
 
-        // For read operations, set the MSB of the register address
-        let read_message = read_reg | 0x80;
-        self.spi_perh
-            .spi
-            .write(&[read_message])
-            .await
-            .map_err(|_| "SPI write failed")?;
-
         // bmi088 accel register needs to be read twice to get the correct message
         let mut buffer = [0u8];
+        let read_message = read_reg | 0x80;
+
+        // For read operations, set the MSB of the register address
+        self.spi_perh
+                .spi
+                .write(&[read_message])
+                .await
+                .map_err(|_| "SPI write failed").unwrap();
+
         self.spi_perh
             .spi
             .read(&mut buffer)
             .await
-            .map_err(|_| "SPI read failed")?;
+            .map_err(|_| "SPI read failed").unwrap();
+
         // debug!("spi_read_once: {}", &buffer[0]);
+
         self.spi_perh
             .spi
             .read(&mut buffer)
             .await
-            .map_err(|_| "SPI read failed")?;
+            .map_err(|_| "SPI read failed").unwrap();
+
         // debug!("spi_read_twice: {}", &buffer[0]);
-        Timer::after(Duration::from_micros(1)).await; // Small delay
 
         self.spi_perh.cs[0].set_high();
+        Timer::after(Duration::from_micros(1)).await; // Small delay
+
         Ok(buffer[0])
     }
 
     async fn read_gyro_single_register(&mut self, read_reg: u8) -> Result<u8, &'static str> {
+        let mut buffer = [0u8];
         self.spi_perh.cs[1].set_low();
         Timer::after(Duration::from_micros(1)).await; // Small delay
 
@@ -131,15 +163,19 @@ impl Bmi088 {
             .spi
             .write(&[read_message])
             .await
-            .map_err(|_| "SPI write failed")?;
-        let mut buffer = [0u8];
+            .map_err(|_| "SPI write failed").unwrap();
+
         self.spi_perh
             .spi
             .read(&mut buffer)
             .await
-            .map_err(|_| "SPI read failed")?;
+            .map_err(|_| "SPI read failed").unwrap();
+
+        // debug!("spi_read_once: {}", &buffer[0]);
 
         self.spi_perh.cs[1].set_high();
+        Timer::after(Duration::from_micros(1)).await; // Small delay
+
         Ok(buffer[0])
     }
 
@@ -348,34 +384,32 @@ impl Bmi088 {
         )
     }
 
-    pub async fn imu_update(&mut self) {
+    pub async fn imu_update(&mut self) -> Result<(), &'static str> {
         info!("Begin to read imu");
-        match self.read_accel().await {
-            Ok((x, y, z)) => {
-                self.accel = [x, y, z];
-            }
-            Err(e) => {
-                error!("Failed to read accelerometer: {}", e);
-            }
-        }
+        // match self.read_accel().await {
+        //     Ok((x, y, z)) => {
+        //         self.accel = [x, y, z];
+        //     }
+        //     Err(e) => {
+        //         error!("Failed to read accelerometer: {}", e);
+        //     }
+        // }
 
-        match self.read_gyro().await {
-            Ok((x, y, z)) => {
-                self.gyro = [x, y, z];
-            }
-            Err(e) => {
-                error!("Failed to read gyroscope: {}", e);
-            }
-        }
+        // match self.read_gyro().await {
+        //     Ok((x, y, z)) => {
+        //         self.gyro = [x, y, z];
+        //     }
+        //     Err(e) => {
+        //         error!("Failed to read gyroscope: {}", e);
+        //     }
+        // }
 
-        match self.read_temp().await {
-            Ok(temp) => {
-                self.temp = temp;
-            }
-            Err(e) => {
-                error!("Failed to read temperature: {}", e);
-            }
-        }
-        debug!("Update imu data");
+        let temp = self.read_temp().await?;
+        self.temp = temp;
+        info!("Temp: {}", temp);
+
+        // debug!("Update imu data");
+
+        Ok(())
     }
 }
