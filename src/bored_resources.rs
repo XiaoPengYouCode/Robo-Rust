@@ -16,7 +16,7 @@ assign_resources! {
     led: LedResources {
         pin: PA7,
     },
-    key: KeyResources {
+    user_key: KeyResources {
         pin: PA15,
     },
     // fdcan1: Fdcan1Resources {

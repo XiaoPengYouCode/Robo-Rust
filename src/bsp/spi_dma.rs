@@ -34,16 +34,4 @@ impl<const N: usize> SpiHandles<N> {
             self.cs[index].set_level(state);
         }
     }
-
-    pub async fn write(&mut self, index: usize, data: &[u8]) {
-        self.set_cs(index, Level::Low);
-        self.spi.write(data).await.unwrap();
-        self.set_cs(index, Level::High);
-    }
-
-    pub async fn read(&mut self, index: usize, data: &mut [u8]) {
-        self.set_cs(index, Level::Low);
-        self.spi.read(data).await.unwrap();
-        self.set_cs(index, Level::High);
-    }
 }

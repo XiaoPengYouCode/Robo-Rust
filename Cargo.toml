@@ -54,7 +54,6 @@ static_cell = "2"
 chrono = { version = "^0.4", default-features = false }
 grounded = "0.2.0"
 assign-resources = "0.4.1"
-embedded-test = "0.5.0"
 
 
 # cargo build/run
