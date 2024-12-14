@@ -1,7 +1,7 @@
 use embassy_stm32::rcc::*;
 use embassy_stm32::Config;
 
-pub fn dm02_b_config() -> Config {
+pub fn dm02_bored_config() -> Config {
     let mut config = Config::default();
 
     config.rcc.hsi = Some(HSIPrescaler::DIV1);

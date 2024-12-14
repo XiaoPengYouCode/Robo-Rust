@@ -1,9 +1,11 @@
 #![no_std]
 #![no_main]
 
+extern crate nalgebra as na;
+
 pub mod applications;
-pub mod bored_config;
-pub mod bored_resources;
+pub mod bored;
+
 pub mod bsp;
 pub mod modules;
 pub mod tasks;

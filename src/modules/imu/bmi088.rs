@@ -1,4 +1,4 @@
-use crate::bored_resources::ImuResources;
+use crate::bored::bored_resources::ImuResources;
 use defmt::{debug, info, Format};
 use embassy_stm32::gpio::Pin;
 use embassy_stm32::spi;
@@ -132,9 +132,7 @@ impl Bmi088 {
             .await?;
 
         self.spi_perh.spi.read(&mut buffer).await?;
-
         // debug!("spi_read_once: {}", &buffer[0]);
-
         self.spi_perh.spi.read(&mut buffer).await?;
 
         // debug!("spi_read_twice: {}", &buffer[0]);
@@ -215,7 +213,7 @@ impl Bmi088 {
 
         self.spi_perh
             .spi
-            .transfer(&mut receive_data, &mut send_data)
+            .transfer(&mut receive_data, &send_data)
             .await?;
 
         // Copy the received data (excluding the first byte which is dummy)
@@ -268,7 +266,7 @@ impl Bmi088 {
 
         self.spi_perh
             .spi
-            .transfer(&mut receive_data, &mut send_data)
+            .transfer(&mut receive_data, &send_data)
             .await?;
         // debug!("receive data{:#}", receive_data);
 
@@ -309,7 +307,7 @@ impl Bmi088 {
 
         let mut temp = (temp_l << 3) | (temp_h >> 5);
         if temp > 1023 {
-            temp = temp - 2048;
+            temp -= 2048;
         }
         let temp = temp as f32 * 0.125f32 + 23.0f32;
         Ok(temp)
@@ -330,7 +328,7 @@ impl Bmi088 {
         Ok(())
     }
 
-    pub fn format_data(&self) {
+    pub fn format_output_data(&self) {
         info!("---------------------------------");
         info!(
             "Accel: x = {}, y = {}, z = {}",
@@ -342,6 +340,14 @@ impl Bmi088 {
         );
         info!("Temp: {}", self.temp);
         info!("---------------------------------");
+    }
+
+    pub fn get_accel(&self) -> [f32; 3] {
+        self.accel
+    }
+
+    pub fn get_gyro(&self) -> [f32; 3] {
+        self.gyro
     }
 
     #[inline(always)]

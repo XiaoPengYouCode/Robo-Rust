@@ -54,6 +54,7 @@ static_cell = "2"
 chrono = { version = "^0.4", default-features = false }
 grounded = "0.2.0"
 assign-resources = "0.4.1"
+nalgebra = { version = "0.33.2", default-features = false, features = ['libm'] }
 
 
 # cargo build/run
