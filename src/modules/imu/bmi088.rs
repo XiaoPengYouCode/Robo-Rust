@@ -1,4 +1,4 @@
-use crate::bored_resources::ImuResources;
+use crate::bored::bored_resources::ImuResources;
 use defmt::{debug, info, Format};
 use embassy_stm32::gpio::Pin;
 use embassy_stm32::spi;
@@ -22,8 +22,6 @@ impl From<spi::Error> for Bmi088Error {
     }
 }
 
-#[allow(dead_code)]
-#[allow(unused_variables)]
 pub struct Bmi088 {
     pub spi_perh: SpiHandles<2>,
     gyro: [f32; 3],
@@ -58,16 +56,22 @@ impl Bmi088 {
 
     pub async fn bmi088_accel_init(&mut self) -> Result<(), Bmi088Error> {
         info!("Initialize BMI088 Accelerometer");
-
-        //check communication with BMI088
-        let _accel_id: u8 = self.read_accel_single_register(0x00).await?;
-
-        // debug!("accel_id: {:X}", _accel_id);
-
         // soft reset
         self.write_accel_single_register(&ACCEL_RESET_REGISTER, ACCEL_RESET_MESSAGE)
             .await?;
-        Timer::after(Duration::from_millis(80)).await;
+        Timer::after(Duration::from_millis(50)).await;
+        self.write_accel_single_register(&ACC_PWR_CTRL_ADDR, ACC_PWR_CTRL_ON)
+            .await?;
+        self.write_accel_single_register(&ACC_PWR_CTRL_ADDR, ACC_PWR_CTRL_ON)
+            .await?;
+        Timer::after(Duration::from_millis(50)).await;
+        let power_register = self.read_accel_single_register(ACC_PWR_CTRL_ADDR).await?;
+        debug!("Power register: {:X}", power_register);
+        self.write_accel_single_register(&ACC_PWR_CONF_ADDR, ACC_PWR_CONF_ACT)
+            .await?;
+        Timer::after(Duration::from_millis(50)).await;
+        let power_conf_register = self.read_accel_single_register(ACC_PWR_CONF_ADDR).await?;
+        debug!("Power conf register: {:X}", power_conf_register);
 
         let accel_id = self.read_accel_single_register(0x00).await?;
 
@@ -75,10 +79,6 @@ impl Bmi088 {
         if accel_id != 0x1E {
             return Err(Bmi088Error::Custom("Invalid accelerometer chip ID"));
         }
-
-        self.write_accel_single_register(&ACC_PWR_CTRL_ADDR, ACC_PWR_CTRL_ON)
-            .await?;
-        Timer::after(Duration::from_millis(50)).await;
 
         info!("BMI088 Accelerometer initialized successfully");
         Ok(())
@@ -132,9 +132,7 @@ impl Bmi088 {
             .await?;
 
         self.spi_perh.spi.read(&mut buffer).await?;
-
         // debug!("spi_read_once: {}", &buffer[0]);
-
         self.spi_perh.spi.read(&mut buffer).await?;
 
         // debug!("spi_read_twice: {}", &buffer[0]);
@@ -142,6 +140,15 @@ impl Bmi088 {
         Timer::after_micros(1).await;
 
         Ok(buffer[0])
+    }
+
+    async fn test_accel_register(&mut self) -> Result<(), Bmi088Error> {
+        info!("Test accel register");
+        for i in 0..=0x7D {
+            let accel_data = self.read_accel_single_register(i).await?;
+            debug!("Register {:X}: {:X}", i, accel_data);
+        }
+        Ok(())
     }
 
     async fn read_gyro_single_register(&mut self, read_reg: u8) -> Result<u8, Bmi088Error> {
@@ -172,12 +179,14 @@ impl Bmi088 {
         write_register: &u8,
         write_message: u8,
     ) -> Result<(), Bmi088Error> {
+        self.accel_csb_low();
         self.spi_perh
             .spi
             .write(&[write_register & BMI088_SPI_WRITE_CODE])
             .await?;
 
         self.spi_perh.spi.write(&[write_message]).await?;
+        self.accel_csb_high();
 
         Ok(())
     }
@@ -207,15 +216,15 @@ impl Bmi088 {
         // info!("Read accel consecutive register");
 
         let mut send_data = [read_reg_first | BMI088_SPI_READ_CODE; 8];
-        let mut receive_data = [0u8; 8];
-
         for i in 0..8 {
             send_data[i] += i as u8;
         }
 
+        let mut receive_data = [0u8; 8];
+
         self.spi_perh
             .spi
-            .transfer(&mut receive_data, &mut send_data)
+            .transfer(&mut receive_data, &send_data)
             .await?;
 
         // Copy the received data (excluding the first byte which is dummy)
@@ -259,7 +268,7 @@ impl Bmi088 {
     ) -> Result<[u8; 6], Bmi088Error> {
         // info!("Read gyro register");
 
-        let mut send_data = [read_reg_first | BMI088_SPI_WRITE_CODE; 7];
+        let mut send_data = [read_reg_first | BMI088_SPI_READ_CODE; 7];
         let mut receive_data = [0u8; 7];
 
         for i in 0..7 {
@@ -268,7 +277,7 @@ impl Bmi088 {
 
         self.spi_perh
             .spi
-            .transfer(&mut receive_data, &mut send_data)
+            .transfer(&mut receive_data, &send_data)
             .await?;
         // debug!("receive data{:#}", receive_data);
 
@@ -309,7 +318,7 @@ impl Bmi088 {
 
         let mut temp = (temp_l << 3) | (temp_h >> 5);
         if temp > 1023 {
-            temp = temp - 2048;
+            temp -= 2048;
         }
         let temp = temp as f32 * 0.125f32 + 23.0f32;
         Ok(temp)
@@ -317,7 +326,6 @@ impl Bmi088 {
 
     pub async fn imu_update(&mut self) -> Result<(), Bmi088Error> {
         // info!("Begin to read imu");
-
         let (accel_x, accel_y, accel_z) = self.read_accel().await?;
         self.accel = [accel_x, accel_y, accel_z];
 
@@ -330,7 +338,7 @@ impl Bmi088 {
         Ok(())
     }
 
-    pub fn format_data(&self) {
+    pub fn format_output_data(&self) {
         info!("---------------------------------");
         info!(
             "Accel: x = {}, y = {}, z = {}",
@@ -342,6 +350,14 @@ impl Bmi088 {
         );
         info!("Temp: {}", self.temp);
         info!("---------------------------------");
+    }
+
+    pub fn get_accel(&self) -> [f32; 3] {
+        self.accel
+    }
+
+    pub fn get_gyro(&self) -> [f32; 3] {
+        self.gyro
     }
 
     #[inline(always)]
