@@ -1,4 +1,5 @@
 use crate::bored::bored_resources::ImuResources;
+
 use defmt::{debug, info, Format};
 use embassy_stm32::gpio::Pin;
 use embassy_stm32::spi;
@@ -32,7 +33,8 @@ pub struct Bmi088 {
 impl Bmi088 {
     pub fn new(imu_resources: ImuResources) -> Self {
         let mut config = Config::default();
-        config.frequency = Hertz(1_000);
+        // bmi088 spi最大通信频率为10MHz
+        config.frequency = Hertz(10_000_000);
 
         Self {
             spi_perh: SpiHandles::new(
@@ -60,22 +62,23 @@ impl Bmi088 {
         self.write_accel_single_register(&ACCEL_RESET_REGISTER, ACCEL_RESET_MESSAGE)
             .await?;
         Timer::after(Duration::from_millis(50)).await;
+
+        // 不知道为什么一次写入不成功，但是两次写入就成功了
+        // 打开加速度计电源（要求软重启后必须打开）
         self.write_accel_single_register(&ACC_PWR_CTRL_ADDR, ACC_PWR_CTRL_ON)
             .await?;
         self.write_accel_single_register(&ACC_PWR_CTRL_ADDR, ACC_PWR_CTRL_ON)
             .await?;
         Timer::after(Duration::from_millis(50)).await;
-        let power_register = self.read_accel_single_register(ACC_PWR_CTRL_ADDR).await?;
-        debug!("Power register: {:X}", power_register);
+
+        // 不知道为什么一次写入就成功了
+        // 默认为低功耗模式，需要写为active模式
         self.write_accel_single_register(&ACC_PWR_CONF_ADDR, ACC_PWR_CONF_ACT)
             .await?;
         Timer::after(Duration::from_millis(50)).await;
-        let power_conf_register = self.read_accel_single_register(ACC_PWR_CONF_ADDR).await?;
-        debug!("Power conf register: {:X}", power_conf_register);
 
+        // 检查加速度计ID
         let accel_id = self.read_accel_single_register(0x00).await?;
-
-        debug!("Accel_id: {:X}", accel_id);
         if accel_id != 0x1E {
             return Err(Bmi088Error::Custom("Invalid accelerometer chip ID"));
         }
@@ -87,18 +90,13 @@ impl Bmi088 {
     pub async fn bmi088_gyro_init(&mut self) -> Result<(), Bmi088Error> {
         info!("Initialize BMI088 Gyroscope");
 
-        //check communication with BMI088
-        let _gyro_id = self.read_gyro_single_register(0x00).await?;
-
         // soft reset
         self.write_gyro_single_register(&GYRO_RESET_REGISTER, GYRO_RESET_MESSAGE)
             .await?;
         Timer::after(Duration::from_millis(50)).await;
 
+        // 检查陀螺仪ID
         let gyro_id: u8 = self.read_gyro_single_register(0x00).await?;
-
-        debug!("Gyro_id: {:X}", gyro_id);
-
         if gyro_id != 0x0F {
             return Err(Bmi088Error::Custom("Invalid gyroscope chip ID"));
         }
@@ -113,16 +111,13 @@ impl Bmi088 {
         self.bmi088_accel_init().await?;
         self.bmi088_gyro_init().await?;
 
-        Timer::after(Duration::from_millis(50)).await;
-
         info!("Bmi088 Initialize success");
         Ok(())
     }
 
+    // bmi088 accel register needs to be read twice to get the correct message
     async fn read_accel_single_register(&mut self, read_reg: u8) -> Result<u8, Bmi088Error> {
-        self.accel_csb_low();
-        Timer::after_micros(1).await;
-        // bmi088 accel register needs to be read twice to get the correct message
+        self.accel_csb_low().await;
         let mut buffer = [0u8];
 
         // For read operations, set the MSB of the register address
@@ -132,32 +127,17 @@ impl Bmi088 {
             .await?;
 
         self.spi_perh.spi.read(&mut buffer).await?;
-        // debug!("spi_read_once: {}", &buffer[0]);
         self.spi_perh.spi.read(&mut buffer).await?;
 
-        // debug!("spi_read_twice: {}", &buffer[0]);
-        self.accel_csb_high();
-        Timer::after_micros(1).await;
+        self.accel_csb_high().await;
 
         Ok(buffer[0])
     }
 
-    async fn test_accel_register(&mut self) -> Result<(), Bmi088Error> {
-        info!("Test accel register");
-        for i in 0..=0x7D {
-            let accel_data = self.read_accel_single_register(i).await?;
-            debug!("Register {:X}: {:X}", i, accel_data);
-        }
-        Ok(())
-    }
-
     async fn read_gyro_single_register(&mut self, read_reg: u8) -> Result<u8, Bmi088Error> {
-        self.gyro_csb_low();
-        Timer::after_millis(1).await;
+        self.gyro_csb_low().await;
 
         let mut buffer = [0u8];
-
-        // For read operations, set the MSB of the register address
 
         self.spi_perh
             .spi
@@ -166,11 +146,7 @@ impl Bmi088 {
 
         self.spi_perh.spi.read(&mut buffer).await?;
 
-        // debug!("spi_read_once: {}", &buffer[0]);
-
-        self.gyro_csb_high();
-        Timer::after(Duration::from_micros(1)).await; // Small delay
-
+        self.gyro_csb_high().await;
         Ok(buffer[0])
     }
 
@@ -179,15 +155,16 @@ impl Bmi088 {
         write_register: &u8,
         write_message: u8,
     ) -> Result<(), Bmi088Error> {
-        self.accel_csb_low();
+        self.accel_csb_low().await;
+
         self.spi_perh
             .spi
             .write(&[write_register & BMI088_SPI_WRITE_CODE])
             .await?;
 
         self.spi_perh.spi.write(&[write_message]).await?;
-        self.accel_csb_high();
 
+        self.accel_csb_high().await;
         Ok(())
     }
 
@@ -196,7 +173,7 @@ impl Bmi088 {
         write_register: &u8,
         write_message: u8,
     ) -> Result<(), Bmi088Error> {
-        // For read operations, set the MSB of the register address
+        self.gyro_csb_low().await;
         self.spi_perh
             .spi
             .write(&[write_register & BMI088_SPI_WRITE_CODE])
@@ -204,110 +181,72 @@ impl Bmi088 {
 
         self.spi_perh.spi.write(&[write_message]).await?;
 
-        Timer::after(Duration::from_micros(1)).await; // Small delay
+        self.gyro_csb_high().await;
 
         Ok(())
     }
 
-    async fn read_accel_consecutive_register(
-        &mut self,
-        read_reg_first: u8,
-    ) -> Result<[u8; 6], Bmi088Error> {
-        // info!("Read accel consecutive register");
+    pub async fn read_accel(&mut self) -> Result<(f32, f32, f32, f32), Bmi088Error> {
+        // info!("Begin to read imu accel");
+        self.accel_csb_low().await;
 
-        let mut send_data = [read_reg_first | BMI088_SPI_READ_CODE; 8];
-        for i in 0..8 {
-            send_data[i] += i as u8;
-        }
-
-        let mut receive_data = [0u8; 8];
+        let send_data = [0x12 | BMI088_SPI_READ_CODE; 0x23 - 0x12 + 3];
+        let mut receive_data = [0u8; 0x23 - 0x12 + 3];
 
         self.spi_perh
             .spi
             .transfer(&mut receive_data, &send_data)
             .await?;
 
-        // Copy the received data (excluding the first byte which is dummy)
-        let accel = receive_data[2..]
-            .try_into()
-            .map_err(|_| Bmi088Error::Custom("Slice to array conversion failed"))?;
+        self.accel_csb_high().await;
 
-        Ok(accel)
-    }
-
-    pub async fn read_accel(&mut self) -> Result<(f32, f32, f32), Bmi088Error> {
-        self.accel_csb_low();
-        // info!("Begin to read imu accel");
-        let buffer = self.read_accel_consecutive_register(0x12u8).await?;
-
-        let x_l = buffer[0];
-        let x_h = buffer[1];
-        let y_l = buffer[2];
-        let y_h = buffer[3];
-        let z_l = buffer[4];
-        let z_h = buffer[5];
-
-        // debug!(
-        //     "Accel: x_l = {}, x_h = {}, y_l = {}, y_h = {}, z_l = {}, z_h = {}",
-        //     x_l, x_h, y_l, y_h, z_l, z_h
-        // );
+        let x_l = receive_data[2];
+        let x_h = receive_data[3];
+        let y_l = receive_data[4];
+        let y_h = receive_data[5];
+        let z_l = receive_data[6];
+        let z_h = receive_data[7];
 
         let x = i16::from_le_bytes([x_l, x_h]) as f32 * BMI088_ACCEL_3G_SEN;
         let y = i16::from_le_bytes([y_l, y_h]) as f32 * BMI088_ACCEL_3G_SEN;
         let z = i16::from_le_bytes([z_l, z_h]) as f32 * BMI088_ACCEL_3G_SEN;
 
-        // debug!("Accel_official: x = {}, y = {}, z = {}", x, y, z);
+        let temp_l = receive_data[receive_data.len() - 2] as i16;
+        let temp_h = receive_data[receive_data.len() - 1] as i16;
 
-        self.accel_csb_high();
-        Ok((x, y, z))
+        let mut temp = (temp_l << 3) | (temp_h >> 5);
+        if temp > 1023 {
+            temp -= 2048;
+        }
+        let temp = temp as f32 * 0.125f32 + 23.0f32;
+
+        Ok((x, y, z, temp))
     }
 
-    async fn read_gyro_consecutive_register(
-        &mut self,
-        read_reg_first: u8,
-    ) -> Result<[u8; 6], Bmi088Error> {
+    pub async fn read_gyro(&mut self) -> Result<(f32, f32, f32), Bmi088Error> {
         // info!("Read gyro register");
+        self.gyro_csb_low().await;
 
-        let mut send_data = [read_reg_first | BMI088_SPI_READ_CODE; 7];
+        let send_data = [0x02 | BMI088_SPI_READ_CODE; 7];
         let mut receive_data = [0u8; 7];
-
-        for i in 0..7 {
-            send_data[i] += i as u8;
-        }
 
         self.spi_perh
             .spi
             .transfer(&mut receive_data, &send_data)
             .await?;
-        // debug!("receive data{:#}", receive_data);
 
-        // Copy the received data (excluding the first byte which is dummy)
-        let gyro = receive_data[1..]
-            .try_into()
-            .map_err(|_| Bmi088Error::Custom("Slice to array conversion failed"))?;
+        self.gyro_csb_high().await;
 
-        Ok(gyro)
-    }
-
-    pub async fn read_gyro(&mut self) -> Result<(f32, f32, f32), Bmi088Error> {
-        self.gyro_csb_low();
-        let buffer = self.read_gyro_consecutive_register(0x02u8).await?;
-
-        let x_l = buffer[0];
-        let x_h = buffer[1];
-        let y_l = buffer[2];
-        let y_h = buffer[3];
-        let z_l = buffer[4];
-        let z_h = buffer[5];
-
-        // debug!("gyro: x_l = {}, x_h = {}, y_l = {}, y_h = {}, z_l = {}, z_h = {}", x_l, x_h, y_l, y_h, z_l, z_h);
+        let x_l = receive_data[0];
+        let x_h = receive_data[1];
+        let y_l = receive_data[2];
+        let y_h = receive_data[3];
+        let z_l = receive_data[4];
+        let z_h = receive_data[5];
 
         let x = i16::from_le_bytes([x_l, x_h]) as f32 * BMI088_GYRO_2000_SEN;
         let y = i16::from_le_bytes([y_l, y_h]) as f32 * BMI088_GYRO_2000_SEN;
         let z = i16::from_le_bytes([z_l, z_h]) as f32 * BMI088_GYRO_2000_SEN;
-
-        // debug!("Gyro: x={}, y={}, z={}", x, y, z);
-        self.gyro_csb_high();
 
         Ok((x, y, z))
     }
@@ -326,57 +265,54 @@ impl Bmi088 {
 
     pub async fn imu_update(&mut self) -> Result<(), Bmi088Error> {
         // info!("Begin to read imu");
-        let (accel_x, accel_y, accel_z) = self.read_accel().await?;
+        let (accel_x, accel_y, accel_z, temp) = self.read_accel().await?;
         self.accel = [accel_x, accel_y, accel_z];
-
-        let gyro = self.read_gyro().await?;
-        self.gyro = [gyro.0, gyro.1, gyro.2];
-
-        let temp = self.read_temp().await?;
+        let (gyro_x, gyro_y, gyro_z) = self.read_gyro().await?;
+        self.gyro = [gyro_x, gyro_y, gyro_z];
         self.temp = temp;
 
         Ok(())
     }
 
     pub fn format_output_data(&self) {
-        info!("---------------------------------");
-        info!(
+        debug!("---------------------------------");
+        debug!(
             "Accel: x = {}, y = {}, z = {}",
             self.accel[0], self.accel[1], self.accel[2]
         );
-        info!(
+        debug!(
             "Gyro: x = {}, y = {}, z = {}",
             self.gyro[0], self.gyro[1], self.gyro[2]
         );
-        info!("Temp: {}", self.temp);
-        info!("---------------------------------");
+        debug!("Temp: {}", self.temp);
+        debug!("---------------------------------");
     }
 
-    pub fn get_accel(&self) -> [f32; 3] {
-        self.accel
+    pub fn get_accel(&self) -> &[f32; 3] {
+        &self.accel
     }
 
-    pub fn get_gyro(&self) -> [f32; 3] {
-        self.gyro
+    pub fn get_gyro(&self) -> &[f32; 3] {
+        &self.gyro
     }
 
     #[inline(always)]
-    pub fn accel_csb_low(&mut self) {
+    pub async fn accel_csb_low(&mut self) {
         self.spi_perh.cs[0].set_low();
     }
 
     #[inline(always)]
-    pub fn accel_csb_high(&mut self) {
+    pub async fn accel_csb_high(&mut self) {
         self.spi_perh.cs[0].set_high();
     }
 
     #[inline(always)]
-    pub fn gyro_csb_low(&mut self) {
+    pub async fn gyro_csb_low(&mut self) {
         self.spi_perh.cs[1].set_low();
     }
 
     #[inline(always)]
-    pub fn gyro_csb_high(&mut self) {
+    pub async fn gyro_csb_high(&mut self) {
         self.spi_perh.cs[1].set_high();
     }
 }
