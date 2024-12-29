@@ -1,3 +1,6 @@
+mod registers;
+mod config;
+
 use crate::bored::bored_resources::ImuResources;
 
 use defmt::{debug, info, Format};
@@ -9,7 +12,7 @@ use embassy_time::Duration;
 use embassy_time::Timer;
 
 use crate::bsp::spi_dma::*;
-use crate::modules::imu::bmi088_registers::*;
+use self::registers::*;
 
 #[derive(Debug, Format)]
 pub enum Bmi088Error {
