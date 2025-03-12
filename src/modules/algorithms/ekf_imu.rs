@@ -1,60 +1,45 @@
-use defmt::debug;
 use na::{Matrix3, Matrix3x6, Matrix6, Unit, UnitQuaternion, Vector3, Vector6};
 
 pub struct ESKF {
-    // 名义状态：四元数
-    nominal_q: UnitQuaternion<f32>,
-
-    // 误差状态：
-    // 前3维：位置误差
-    // 后3维：姿态误差
-    error_state: Vector6<f32>,
-
-    // 协方差矩阵
-    p: Matrix6<f32>,
-
-    // 过程噪声
-    q_noise: Matrix6<f32>,
-
-    // 测量噪声
-    r_noise: Matrix3<f32>,
-}
-
-impl Default for ESKF {
-    fn default() -> Self {
-        Self::new()
-    }
+    nominal_q: UnitQuaternion<f32>, // 名义状态 四元数
+    error_estimate: Vector6<f32>,
+    error_estimate_p: Matrix6<f32>,
+    error_prediction: Vector6<f32>,
+    error_prediction_p: Matrix6<f32>,
+    f: Matrix6<f32>, // 状态转移矩阵
+    q: Matrix6<f32>, // 过程噪声协方差矩阵
+    measurement: Vector6<f32>, // 测量值
+    r: Matrix3<f32>, // 传感器噪声协方差矩阵
+    kalman_gian: Matrix6<f32>, // 卡尔曼增益
+    dt: f32,
 }
 
 impl ESKF {
-    pub fn new() -> Self {
-        ESKF {
+    pub fn new(default_estimate: Vector6<f32>, default_estimate_p: Vector6<f32>) -> Self {
+        let eskf = ESKF {
             nominal_q: UnitQuaternion::identity(),
-            error_state: Vector6::zeros(),
-            p: Matrix6::identity() * 0.1,                  // 初始协方差
-            q_noise: Matrix6::from_diagonal_element(0.01), // 过程噪声
-            r_noise: Matrix3::from_diagonal_element(0.1),  // 测量噪声
+            error_state: default_estimate,
+            error_estimate_p: default_estimate_p,
+            error_prediction: Vector6<f32>::zeros(),
+            error_prediction_p: Matrix6<f32>::zeros(),
+            f: Matrix6<f32>::zeros(),
+            q: Matrix6<f32>::identity() * 0.01,
+            measurement: Vector3<f32>::zeros(),
+            r: Matrix3<f32>::identity() * 0.1,
+            kalman_gian: Matrix6<f32>::zeros(),
         }
+
+        // init predict
+        eskf.predict = eskf.f * eskf.estimate + eskf.b * eskf.u;
+        eskf.predict_p = eskf.f * eskf.estimate_p * eskf.f.transpose() + eskf.q;
+        eskf
     }
 
-    // 预测步骤
-    pub fn predict(&mut self, gyro: Vector3<f32>, dt: f32) {
-        // 使用陀螺仪数据更新名义状态
-        let omega = Vector3::new(gyro.x, gyro.y, gyro.z);
-        let rotation_increment = UnitQuaternion::from_scaled_axis(omega * dt);
-
-        // 更新名义四元数
-        self.nominal_q = rotation_increment * self.nominal_q;
-        self.nominal_q = UnitQuaternion::new_normalize(self.nominal_q.into_inner());
-
-        // 协方差传播
-        // F是状态转移矩阵，通常近似为单位矩阵
-        let f: Matrix6<f32> = Matrix6::identity();
-        self.p = f * self.p * f.transpose() + self.q_noise;
+    pub fn measurement(&mut self, measurement: Vector6<f32>) {
+        self.measurement = measurement;
     }
 
-    // 测量更新步骤
-    pub fn update(&mut self, accel: Vector3<f32>) {
+    pub fn update(&mut self) {
         // 测量矩阵
         let mut h = Matrix3x6::zeros();
         h.view_mut((0, 3), (3, 3)).copy_from(&Matrix3::identity());
@@ -68,20 +53,14 @@ impl ESKF {
         // 计算观测协方差
         let s: Matrix3<f32> = h * self.p * h.transpose() + self.r_noise;
 
-        // 安全求逆
-        let s_inv = match s.try_inverse() {
-            Some(inv) => inv,
-            None => {
-                debug!("Matrix inversion failed");
-                return;
-            }
-        };
+        // 求逆
+        let s_inv = s.try_inverse().unwrap_or(Matrix3::<f32>::zeros());
 
-        // Kalman增益
-        let k = self.p * h.transpose() * s_inv;
+        // 1. 计算卡尔曼增益
+        self.kalman_gian = self.p * h.transpose() * s_inv;
 
-        // 更新误差状态
-        self.error_state += k * y;
+        // 2. 更新误差状态
+        self.error_state += self.kalman_gian * y;
 
         // 校正名义状态
         // 使用对数映射将误差状态注入名义状态
@@ -92,20 +71,34 @@ impl ESKF {
         self.nominal_q = correction * self.nominal_q;
 
         // 更新协方差
-        let i_kh = Matrix6::identity() - k * h;
+        let i_kh = Matrix6::identity() - self.kalman_gian * h;
         // 使用joseph形式的协方差更新，以保持正定性
-        self.p = i_kh * self.p * i_kh.transpose() + k * self.r_noise * k.transpose();
+        self.p = i_kh * self.p * i_kh.transpose() + self.kalman_gian * self.r_noise * self.kalman_gian.transpose();
 
         // 重置误差状态
         self.error_state = Vector6::zeros();
     }
 
-    pub fn get_euler_angles_degrees(&self) -> (f32, f32, f32) {
+    // 预测步骤
+    pub fn predict(&mut self) {
+        // 使用陀螺仪数据更新名义状态
+        let rotation_increment = UnitQuaternion::from_scaled_axis(gyro * dt);
+
+        // 更新名义四元数
+        self.nominal_q = rotation_increment * self.nominal_q;
+        self.nominal_q = UnitQuaternion::new_normalize(self.nominal_q.into_inner());
+
+        // 协方差传播, F是状态转移矩阵，通常近似为单位矩阵
+        self.p = self.f * self.p * self.f.transpose() + self.q_noise;
+    }
+
+
+    pub fn get_euler_angles_degrees(&self) -> [f32; 3] {
         let euler = self.nominal_q.euler_angles();
-        (
+        [
             euler.0.to_degrees(),
             euler.1.to_degrees(),
             euler.2.to_degrees(),
-        )
+        ]
     }
 }

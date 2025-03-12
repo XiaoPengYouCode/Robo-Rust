@@ -18,10 +18,10 @@ async fn main(_spawner: Spawner) {
     let start = Instant::now();
     for i in 0..1000 {
         let x = (i as f32) / 100.0;
-        let _ = x.sin(); // 使用 micromath
+        let _ = x.sin(); // 使用 micro math
 
         if i % 100 == 0 {
-            info!("MICROMATH: sin({}) = {}", x, x.sin());
+            info!("MICRO MATH: sin({}) = {}", x, x.sin());
         }
     }
     let micro_time = start.elapsed().as_micros();

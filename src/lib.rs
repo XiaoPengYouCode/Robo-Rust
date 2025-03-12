@@ -5,7 +5,6 @@ extern crate nalgebra as na;
 
 pub mod applications;
 pub mod bored;
-
-pub mod bsp;
+pub mod bsc;
 pub mod modules;
 pub mod tasks;

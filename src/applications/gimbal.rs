@@ -1,46 +1,27 @@
-use defmt::{debug, info, todo};
-
-use crate::modules::imu::Bmi088;
 use crate::modules::motors::dji_motors::gm6020::Gm6020;
+use defmt::*;
 
-struct ClassicGimbalHandle {
-    yaw_motor: Gm6020,
+pub struct Gimbal {
     pitch_motor: Gm6020,
-    pitch_imu: Bmi088,
-}
-
-struct YPYDoubleYawGimbalHandle {
     yaw_motor: Gm6020,
-    pitch_motor: Gm6020,
-    small_yaw_motor: Gm6020,
-    small_yaw_imu: Bmi088,
-}
-
-pub enum Gimbal {
-    ClassicGimbal(ClassicGimbalHandle),
-    YPYDoubleYawGimbal(YPYDoubleYawGimbalHandle),
-    // YYPDoubleYawGimbal {
-    //     yaw_motor: Gm6020,
-    //     small_yaw_motor: Gm6020,
-    //     pitch_motor: Gm6020,
-    //     pitch_imu: Bmi088,
-    // },
-    // // --↑--
-    // // b ↑ a
-    // // --↑--
-    // DoubleClassisGimbal {
-    //     yaw_motor: Gm6020,
-    //     gimbal_1: ClassicGimbalHandle,
-    //     gimbal_2: ClassicGimbalHandle,
-    // },
 }
 
 impl Gimbal {
-    pub fn yaw_rotate(&self, rotate_angle: f32) {
-        if let ClassicGimbalHandle { yaw_motor, .. } = self {
-            info!("Yaw motor id: {}", yaw_motor.can_id);
-            info!("Yaw motor rotate angle: {}", rotate_angle);
-            todo!("rotate");
+    pub fn new(pitch_motor: Gm6020, yaw_motor: Gm6020) -> Self {
+        Gimbal {
+            pitch_motor,
+            yaw_motor,
         }
+    }
+
+    pub fn id(&self) {
+        info!("pitch motor id = {}", self.pitch_motor.id());
+        info!("yaw motor id = {}", self.yaw_motor.id());
+    }
+}
+
+impl Default for Gimbal {
+    fn default() -> Self {
+        Gimbal::new(Gm6020::new(1).unwrap(), Gm6020::new(2).unwrap())
     }
 }
