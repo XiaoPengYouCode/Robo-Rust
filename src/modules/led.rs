@@ -1,7 +1,7 @@
 use embassy_time::Timer;
 
 use crate::bored::bored_resources::LedSpiResources;
-use crate::bsc::spi6_ws2812::WS2812;
+use crate::bsc::spi6_ws2812::Ws2812;
 
 struct GrbColor {
     pub color_data: [u8; 3],
@@ -49,14 +49,14 @@ impl GrbColor {
 }
 
 pub struct Led {
-    led: WS2812,
+    led: Ws2812,
     grb_color: GrbColor,
 }
 
 impl Led {
     pub fn new(led_resource: LedSpiResources) -> Led {
         Led {
-            led: WS2812::new(led_resource),
+            led: Ws2812::new(led_resource),
             grb_color: GrbColor::new(),
         }
     }

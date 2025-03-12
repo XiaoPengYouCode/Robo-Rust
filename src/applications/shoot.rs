@@ -10,7 +10,7 @@ struct Shoot {
 }
 
 impl Shoot {
-    pub fn new() -> Self {
+    pub fn _new() -> Self {
         Shoot {
             left_fric_motor: Rm3508::new(Rm3508ReductionRatio::Ratio1, 1).unwrap(),
             right_fric_motor: Rm3508::new(Rm3508ReductionRatio::Ratio1, 1).unwrap(),
@@ -19,10 +19,10 @@ impl Shoot {
         }
     }
 
-    fn is_bullet_speed_suitable(&self) -> bool {
-        if self.last_seven_bullet_speed.iter().last() >= Some(&WARNING_BULLET_SPEED) {
-            false
-        }
+    fn _is_bullet_speed_suitable(&self) -> bool {
+        // if self.last_seven_bullet_speed.iter().last() >= Some(&WARNING_BULLET_SPEED) {
+        //     false
+        // }
         true
     }
 }

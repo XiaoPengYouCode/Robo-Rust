@@ -1,4 +1,4 @@
-use na::Vector3;
+use na::{Matrix6, Vector3, Vector6};
 
 use crate::bored::bored_resources::ImuSpiResources;
 use crate::bsc::spi2_dma_bmi088::{Bmi088, Bmi088Error};
@@ -44,7 +44,7 @@ impl Imu {
     pub fn new(re: ImuSpiResources) -> Self {
         Self {
             bmi088: Bmi088::new(re),
-            eskf: ESKF::new(),
+            eskf: ESKF::new(Vector6::<f32>::identity(), Matrix6::<f32>::identity()),
             data: ImuData::new(),
         }
     }
@@ -58,12 +58,12 @@ impl Imu {
         self.bmi088.imu_bmi088_init().await
     }
 
-    pub fn predict(&mut self, gyro: Vector3<f32>, dt: f32) {
-        self.eskf.predict(gyro, dt);
+    pub fn predict(&mut self) {
+        self.eskf.predict(Vector3::<f32>::identity());
     }
 
-    pub fn eskf_update(&mut self, accel: Vector3<f32>) {
-        self.eskf.update(accel);
+    pub fn eskf_update(&mut self) {
+        self.eskf.update(Vector3::<f32>::identity());
     }
 
     pub fn get_euler_angles_degrees(&self) -> [f32; 3] {

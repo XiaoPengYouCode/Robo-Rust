@@ -1,29 +1,26 @@
-use crate::bsp::usart::Uart;
+// use crate::bsc::usart::Uart;
 
 pub enum PcDevice {
     // Nx(Communication),
     Nuc(Communication),
 }
 
-enum Communication {
+pub enum Communication {
     UsbSerial,
     // Usart,
     // Can,
 }
 
 impl PcDevice {
-    pub async fn new() -> Self {
-        let comm = Communication::UsSerial;
-        NucInterface { comm }
+    pub fn new() -> Self {
+        let comm = Communication::UsbSerial;
+        PcDevice::Nuc(comm)
     }
 
-    pub async fn send_telemetry(&mut self, telemetry: Telemetry) -> Result<(), CommunicationError> {
+    // pub async fn send_telemetry(&mut self, telemetry: Telemetry) -> Result<(), CommunicationError> {
+    // }
 
-    }
-
-    pub async fn receive_command(&mut self) -> Result<Command, CommunicationError> {
-
-    }
+    // pub async fn receive_command(&mut self) -> Result<Command, CommunicationError> {}
 }
 //
 // pub struct NxInterface {

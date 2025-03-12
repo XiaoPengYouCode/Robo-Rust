@@ -2,7 +2,6 @@ use defmt::{error, info};
 use defmt_rtt as _;
 use embassy_executor;
 use embassy_time::{Duration, Ticker};
-use na::{ArrayStorage, Const, Matrix};
 
 use crate::bored::bored_resources::*;
 use crate::modules::imu::Imu;
@@ -20,14 +19,8 @@ pub async fn task_imu(imu_resources: ImuSpiResources) {
                 error!("IMU update error: {:?}", e);
             };
 
-            let accel_matrix =
-                Matrix::<f32, Const<3>, Const<1>, ArrayStorage<f32, 3, 1>>::from(imu.accel());
-
-            let gyro_matrix =
-                Matrix::<f32, Const<3>, Const<1>, ArrayStorage<f32, 3, 1>>::from(imu.gyro());
-
-            imu.predict(accel_matrix, 0.001);
-            imu.eskf_update(gyro_matrix);
+            imu.predict();
+            imu.eskf_update();
 
             let [roll, pitch, yaw] = imu.get_euler_angles_degrees();
             info!("Roll: {}, Pitch: {}, Yaw: {}", roll, pitch, yaw);

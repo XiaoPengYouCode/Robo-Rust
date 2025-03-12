@@ -1,5 +1,4 @@
 /target
-/.zed
 /.vscode
 /.idea
 /.rust-analyzer.json

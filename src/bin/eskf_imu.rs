@@ -11,7 +11,6 @@ use roborust::bored::bored_resources::*;
 use roborust::split_resources;
 
 use roborust::tasks::task_imu::task_imu;
-use roborust::tasks::task_led::task_led;
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
