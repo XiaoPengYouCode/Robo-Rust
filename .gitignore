@@ -5,3 +5,4 @@
 /.rust-analyzer.json
 /Cargo.lock
 /some_other_file
+/.lapce
