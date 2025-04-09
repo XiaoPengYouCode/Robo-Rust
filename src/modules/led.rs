@@ -1,6 +1,6 @@
 use embassy_time::Timer;
 
-use crate::bored::bored_resources::LedSpiResources;
+use crate::bored::bored_resources::LedSpi6Resources;
 use crate::bsc::spi6_ws2812::Ws2812;
 
 struct GrbColor {
@@ -54,7 +54,7 @@ pub struct Led {
 }
 
 impl Led {
-    pub fn new(led_resource: LedSpiResources) -> Led {
+    pub fn new(led_resource: LedSpi6Resources) -> Led {
         Led {
             led: Ws2812::new(led_resource),
             grb_color: GrbColor::new(),
@@ -65,7 +65,7 @@ impl Led {
         loop {
             self.led.led_show_brg(&self.grb_color.color_data);
             self.grb_color.color_gradient();
-            Timer::after_millis(10).await;
+            Timer::after_millis(20).await;
         }
     }
 
@@ -78,5 +78,11 @@ impl Led {
             self.led.led_show_brg(&self.grb_color.color_data);
             Timer::after_millis(500).await;
         }
+    }
+
+    pub async fn off(&mut self) {
+        self.grb_color.dark();
+        self.led.led_show_brg(&self.grb_color.color_data);
+        Timer::after_millis(500).await;
     }
 }

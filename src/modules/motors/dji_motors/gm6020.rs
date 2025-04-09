@@ -7,7 +7,7 @@ pub struct Gm6020 {
 
 impl Gm6020 {
     pub fn new(id: u8) -> Result<Self, &'static str> {
-        info!("Gm6020 init!");
+        debug!("Gm6020 init!");
         if id > 31 {
             error!("init Gm6020 Error");
             return Err("init Gm6020 Error");
@@ -19,7 +19,7 @@ impl Gm6020 {
     }
 
     pub fn id(&self) -> u8 {
-        info!("motor id = {}", self.id);
+        debug!("motor id = {}", self.id);
         self.id
     }
 

@@ -7,7 +7,7 @@ pub struct Rm2006 {
 
 impl Rm2006 {
     pub fn new(id: u8) -> Result<Self, &'static str> {
-        info!("Rm2006 init!");
+        debug!("Rm2006 init!");
         if id > 31 {
             error!("init Rm2006 Error");
             return Err("init Rm2006 Error");
@@ -19,7 +19,7 @@ impl Rm2006 {
     }
 
     pub fn id(&self) -> u8 {
-        info!("motor id = {}", self.id);
+        debug!("motor id = {}", self.id);
         self.id
     }
 

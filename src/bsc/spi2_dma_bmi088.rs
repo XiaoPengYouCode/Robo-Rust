@@ -1,4 +1,4 @@
-use defmt::{info, Format};
+use defmt::{Format, debug};
 use embassy_stm32::gpio::{Level, Output, Speed};
 use embassy_stm32::mode::Async;
 use embassy_stm32::spi;
@@ -7,12 +7,8 @@ use embassy_stm32::time::Hertz;
 use embassy_time::Duration;
 use embassy_time::Timer;
 
-use crate::bored::bored_resources::ImuSpiResources;
-use crate::modules::imu::ImuData;
-
-mod registers;
-
-use registers::*;
+use crate::bored::bored_resources::ImuSpi2Resources;
+use crate::modules::imu::bmi088_registers::*;
 
 #[derive(Debug, Format)]
 pub enum Bmi088Error {
@@ -26,13 +22,13 @@ impl From<spi::Error> for Bmi088Error {
     }
 }
 
-pub struct Bmi088 {
+pub struct Spi2Handler {
     spi: Spi<'static, Async>,
     cs: [Output<'static>; 2],
 }
 
-impl Bmi088 {
-    pub fn new(re: ImuSpiResources) -> Self {
+impl Spi2Handler {
+    pub fn new(re: ImuSpi2Resources) -> Self {
         let mut config = Config::default();
         // bmi088 spi最大通信频率为10MHz
         config.frequency = Hertz(10_000_000);
@@ -55,7 +51,7 @@ impl Bmi088 {
     }
 
     pub async fn bmi088_accel_init(&mut self) -> Result<(), Bmi088Error> {
-        info!("Initialize BMI088 Accelerometer");
+        debug!("Initialize BMI088 Accelerometer");
         // soft reset
         self.write_accel_single_register(&ACCEL_RESET_REGISTER, &ACCEL_RESET_MESSAGE)
             .await?;
@@ -88,12 +84,12 @@ impl Bmi088 {
         )
         .await?;
 
-        info!("BMI088 Accelerometer initialized successfully");
+        debug!("BMI088 Accelerometer initialized successfully");
         Ok(())
     }
 
     pub async fn bmi088_gyro_init(&mut self) -> Result<(), Bmi088Error> {
-        info!("Initialize BMI088 Gyroscope");
+        debug!("Initialize BMI088 Gyroscope");
 
         // soft reset
         self.write_gyro_single_register(&GYRO_RESET_REGISTER, &GYRO_RESET_MESSAGE)
@@ -107,22 +103,22 @@ impl Bmi088 {
         }
 
         // 更新陀螺仪配置
-        self.write_gyro_single_register(&GYRO_RANGE_ADDR, &GYRO_RANGE_500_DEG_S)
+        self.write_gyro_single_register(&GYRO_RANGE_ADDR, &GYRO_RANGE_1000_DEG_S)
             .await?;
-        self.write_gyro_single_register(&GYRO_BANDWIDTH_ADDR, &GYRO_ODR_2000HZ_BANDWIDTH_532HZ)
+        self.write_gyro_single_register(&GYRO_BANDWIDTH_ADDR, &GYRO_ODR_1000HZ_BANDWIDTH_116HZ)
             .await?;
 
-        info!("BMI088 Gyroscope initialized successfully");
+        debug!("BMI088 Gyroscope initialized successfully");
         Ok(())
     }
 
     pub async fn imu_bmi088_init(&mut self) -> Result<(), Bmi088Error> {
-        info!("Initialize BMI088");
+        debug!("Initialize BMI088");
 
         self.bmi088_accel_init().await?;
         self.bmi088_gyro_init().await?;
 
-        info!("Bmi088 Initialize success");
+        debug!("Bmi088 Initialize success");
         Ok(())
     }
 
@@ -189,7 +185,7 @@ impl Bmi088 {
         Ok(())
     }
 
-    pub async fn read_accel(&mut self) -> Result<[f32; 4], Bmi088Error> {
+    pub async fn read_accel_and_temp(&mut self) -> Result<[f32; 4], Bmi088Error> {
         self.accel_csb_low().await;
 
         let send_data = [0x12 | BMI088_SPI_READ_CODE; 0x23 - 0x12 + 3];
@@ -232,16 +228,16 @@ impl Bmi088 {
 
         self.gyro_csb_high().await;
 
-        let x_l = receive_data[0];
-        let x_h = receive_data[1];
-        let y_l = receive_data[2];
-        let y_h = receive_data[3];
-        let z_l = receive_data[4];
-        let z_h = receive_data[5];
+        let x_l = receive_data[1];
+        let x_h = receive_data[2];
+        let y_l = receive_data[3];
+        let y_h = receive_data[4];
+        let z_l = receive_data[5];
+        let z_h = receive_data[6];
 
-        let x = i16::from_le_bytes([x_l, x_h]) as f32 * BMI088_GYRO_2000_SEN;
-        let y = i16::from_le_bytes([y_l, y_h]) as f32 * BMI088_GYRO_2000_SEN;
-        let z = i16::from_le_bytes([z_l, z_h]) as f32 * BMI088_GYRO_2000_SEN;
+        let x = i16::from_le_bytes([x_l, x_h]) as f32 * BMI088_GYRO_1000_SEN;
+        let y = i16::from_le_bytes([y_l, y_h]) as f32 * BMI088_GYRO_1000_SEN;
+        let z = i16::from_le_bytes([z_l, z_h]) as f32 * BMI088_GYRO_1000_SEN;
 
         Ok([x, y, z])
     }
@@ -256,12 +252,6 @@ impl Bmi088 {
         }
         let temp = temp as f32 * 0.125f32 + 23.0f32;
         Ok(temp)
-    }
-
-    pub async fn update(&mut self, data: &mut ImuData) -> Result<(), Bmi088Error> {
-        let [accel_x, accel_y, accel_z, temp] = self.read_accel().await?;
-        data.set([accel_x, accel_y, accel_z], self.read_gyro().await?, temp);
-        Ok(())
     }
 
     #[inline(always)]

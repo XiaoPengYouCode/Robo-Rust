@@ -15,8 +15,8 @@ impl Gimbal {
     }
 
     pub fn id(&self) {
-        info!("pitch motor id = {}", self.pitch_motor.id());
-        info!("yaw motor id = {}", self.yaw_motor.id());
+        debug!("pitch motor id = {}", self.pitch_motor.id());
+        debug!("yaw motor id = {}", self.yaw_motor.id());
     }
 }
 

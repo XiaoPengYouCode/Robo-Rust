@@ -1,4 +1,4 @@
-use defmt::info;
+use defmt::debug;
 use embassy_time::{Duration, Instant};
 
 pub struct SimpleMonitor {
@@ -58,7 +58,7 @@ impl SimpleMonitor {
             0.0
         };
 
-        info!(
+        debug!(
             "执行统计:\n目标周期: {}us\n最大耗时: {}us\n最小耗时: {}us\n超时次数: {}/{}\n平均帧率: {} Hz",
             self.target_period_us,
             self.max_time_us,

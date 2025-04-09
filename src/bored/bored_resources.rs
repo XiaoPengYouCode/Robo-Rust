@@ -1,9 +1,10 @@
 use assign_resources::assign_resources;
+use embassy_stm32::Peri;
 use embassy_stm32::peripherals;
 
 // define the resources for DM02 bored
 assign_resources! {
-    imu: ImuSpiResources {
+    imu: ImuSpi2Resources {
         spi_perh: SPI2,
         sck: PB13,
         accel_pin: PC0,
@@ -13,7 +14,7 @@ assign_resources! {
         dma_tx: DMA1_CH1,
         dma_rx: DMA1_CH0,
     },
-    led: LedSpiResources {
+    led: LedSpi6Resources {
         spi_perh: SPI6,
         sck: PA5,
         mosi_pin: PA7,
@@ -21,7 +22,7 @@ assign_resources! {
     user_key: KeyResources {
         pin: PA15,
     },
-    fdcan1: Fdcan1Resources {
+    fdcan1: FdCan1Resources {
         can: FDCAN1,
         tx: PD1,
         rx: PD0,

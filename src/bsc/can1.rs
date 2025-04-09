@@ -1,52 +1,77 @@
-use defmt::error;
-use embassy_stm32::can::{self, Can, CanConfigurator};
-use embassy_stm32::can::{IT0InterruptHandler, IT1InterruptHandler};
+use defmt::{debug, error};
+use embassy_stm32::{
+    can::{CanRx, CanTx, Frame},
+    peripherals::FDCAN1,
+};
 
-use embassy_stm32::bind_interrupts;
-use embassy_stm32::peripherals::FDCAN1;
-
-use crate::bored::bored_resources::Fdcan1Resources;
+use crate::applications::shoot::{self, *};
+use crate::bored::bored_resources::FdCan1Resources;
+use embassy_stm32::{bind_interrupts, can};
 
 bind_interrupts!(struct FdCan1Irqs {
-    FDCAN1_IT0 => IT0InterruptHandler<FDCAN1>;
-    FDCAN1_IT1 => IT1InterruptHandler<FDCAN1>;
+    FDCAN1_IT0 => can::IT0InterruptHandler<FDCAN1>;
+    FDCAN1_IT1 => can::IT1InterruptHandler<FDCAN1>;
 });
 
-pub struct Can1Handle {
-    can1: Can<'static>,
+pub struct Can1Handler {
+    pub tx: CanTx<'static>,
+    pub rx: CanRx<'static>,
+    pub rec_frame: Frame,
+    pub write_frame: Frame,
+    pub shoot: Shoot,
 }
 
-impl Can1Handle {
-    pub fn new(re: Fdcan1Resources) -> Self {
-        let mut can1 = CanConfigurator::new(re.can, re.rx, re.tx, FdCan1Irqs);
-        can1.set_bitrate(1_000_000);
-        let can1 = can1.into_normal_mode();
-        // debug!("FDCAN 1 into normal mode");
-        Self { can1 }
+impl Can1Handler {
+    pub fn new(re: FdCan1Resources) -> Self {
+        let (tx, rx, _) = can::CanConfigurator::new(re.can, re.rx, re.tx, FdCan1Irqs)
+            .into_normal_mode()
+            .split();
+        Self {
+            tx,
+            rx,
+            rec_frame: Frame::new_standard(0x03, &[0u8; 8]).unwrap(),
+            write_frame: Frame::new_standard(0x03, &[0u8; 8]).unwrap(),
+            shoot: shoot::Shoot::new(),
+        }
     }
 
-    pub async fn can_send_read_data(&mut self, data: &[u8; 8]) -> Result<[u8; 8], &'static str> {
-        let frame = can::frame::Frame::new_extended(0x03, data).unwrap();
-        _ = self.can1.write(&frame).await;
-
-        match self.can1.read().await {
-            Ok(envelope) => {
-                let (rx_frame, _) = envelope.parts();
-                Ok([
-                    rx_frame.data()[0],
-                    rx_frame.data()[1],
-                    rx_frame.data()[2],
-                    rx_frame.data()[3],
-                    rx_frame.data()[4],
-                    rx_frame.data()[5],
-                    rx_frame.data()[6],
-                    rx_frame.data()[7],
-                ])
+    pub async fn read(&mut self) {
+        match self.rx.read().await {
+            Ok(e) => {
+                self.rec_frame = e.frame;
+                debug!("Received frame: {:?}", self.rec_frame);
             }
-            Err(_err) => {
-                error!("Error in frame");
-                Err("Failed to send data")
+            Err(e) => {
+                error!("Failed to read frame: {:?}", e);
             }
         }
+    }
+
+    pub async fn write(&mut self) {
+        match self.tx.write(&self.write_frame).await {
+            Some(frame) => {
+                error!("Failed to write frame: {:?}", frame);
+            }
+            None => {
+                debug!("Frame written successfully");
+            }
+        }
+    }
+
+    pub fn estimate(&mut self) {
+        if let Some(data) = self.rec_frame.data().get(..8) {
+            self.shoot
+                .estimate(data.try_into().expect("Failed to convert data"));
+        } else {
+            error!("Invalid data length");
+        }
+    }
+
+    pub fn input(&mut self) {
+        self.shoot.input();
+    }
+
+    pub fn ctrl(&mut self) {
+        self.shoot.ctrl();
     }
 }

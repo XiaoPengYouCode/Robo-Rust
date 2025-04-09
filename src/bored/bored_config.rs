@@ -1,9 +1,14 @@
-use embassy_stm32::rcc::*;
 use embassy_stm32::Config;
+use embassy_stm32::time::Hertz;
+use embassy_stm32::{rcc, rcc::*};
 
 pub fn dm02_bored_config() -> Config {
     let mut config = Config::default();
 
+    config.rcc.hse = Some(rcc::Hse {
+        freq: Hertz(25_000_000),
+        mode: rcc::HseMode::Oscillator,
+    });
     config.rcc.hsi = Some(HSIPrescaler::DIV1);
     config.rcc.csi = true;
     config.rcc.pll1 = Some(Pll {

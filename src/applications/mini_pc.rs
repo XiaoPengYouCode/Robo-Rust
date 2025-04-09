@@ -11,6 +11,12 @@ pub enum Communication {
     // Can,
 }
 
+impl Default for PcDevice {
+    fn default() -> Self {
+        PcDevice::new()
+    }
+}
+
 impl PcDevice {
     pub fn new() -> Self {
         let comm = Communication::UsbSerial;

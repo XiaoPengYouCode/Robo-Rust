@@ -1,7 +1,7 @@
 use embassy_stm32::spi::{Config, Spi};
 use embassy_stm32::time::Hertz;
 
-use crate::bored::bored_resources::LedSpiResources;
+use crate::bored::bored_resources::LedSpi6Resources;
 
 use embassy_stm32::mode::Blocking;
 
@@ -10,7 +10,7 @@ pub struct Ws2812 {
 }
 
 impl Ws2812 {
-    pub fn new(re: LedSpiResources) -> Self {
+    pub fn new(re: LedSpi6Resources) -> Self {
         let mut config = Config::default();
         config.frequency = Hertz(6_400_000); // 0.15625 us
         Self {
